@@ -4,7 +4,7 @@
 
 ---
 
-## 🌟 **Overview**
+##  **Overview**
 
 **Byte & Bite** is a full-stack web application that reimagines the dining experience using **AI and intelligent automation**.
 Customers can browse menus, place orders, and get personalized recommendations through an intuitive interface that integrates **real-time updates** and **AI-assisted search**.
@@ -37,19 +37,6 @@ The system serves three key user groups — **Customers**, **Managers**, and **E
 
 ---
 
-##  **System Architecture**
-
-**Frontend (React)** → communicates via RESTful API → **Backend (Flask)**
-Flask handles requests, processes AI logic using **OpenAI**, and interacts with **Firebase** for data persistence.
-
-```
-[React Frontend] ⇄ [Flask Backend] ⇄ [OpenAI API]
-                     ⇅
-               [Firebase DB/Auth]
-```
-
----
-
 ## 📚 **Documentation**
 
 * **[SPSR](https://docs.google.com/document/d/13DpcHDgux9CwWHoQD3AXyk2lVXsgKwQ8TWyoc_OJGzc/edit?tab=t.0#heading=h.i8hgdt25oe8t) (Software Project Specification Report):** defines purpose, scope, and detailed requirements.
@@ -59,22 +46,17 @@ Flask handles requests, processes AI logic using **OpenAI**, and interacts with 
 
 ---
 
-## 👥 **Team & Acknowledgments**
+## **Team & Acknowledgments**
 
 Update
 
 ---
 
-## 📜 **License**
+## **License**
 
 This project is licensed under the **MIT License** — feel free to fork, adapt, and innovate responsibly.
 
 ---
 
-## 💬 **Contact**
-
-Update
-
----
 
 > © 2025 **Byte & Bite** 
