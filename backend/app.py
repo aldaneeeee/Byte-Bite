@@ -4,7 +4,7 @@ import sqlite3
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, g
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime, timedelta, UTC 
+from datetime import datetime, timedelta, timezone 
 import jwt
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
@@ -13,7 +13,7 @@ from decimal import Decimal
 
 def utc_now():
     """Return current UTC datetime (timezone-aware)"""
-    return datetime.now(UTC)
+    return datetime.now(timezone.utc)
 
 app = Flask(__name__)
 
@@ -60,7 +60,7 @@ class Customers(db.Model):
     username = db.Column(db.String(50), unique=True, nullable=False)
     email = db.Column(db.String(100), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
-    balance = db.Column(db.Numeric(10, 2), default=0.00)
+    #balance = db.Column(db.Numeric(10, 2), default=0.00)         #wei use deposited_cash instead
     deposited_cash = db.Column(db.Numeric(10, 2), default=0.00)
     is_blacklisted = db.Column(db.Boolean, default=False)
     warning_count = db.Column(db.Integer, default=0)
@@ -187,6 +187,45 @@ class Financial_Log(db.Model):
     amount = db.Column(db.Numeric(10, 2), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+def resolve_expired_biddings():
+    """
+    Checks all active biddings. If 5 minutes have passed since the first bid,
+    automatically assign the order to the lowest bidder.
+    """
+    # Find all active biddings
+    active_biddings = Delivery_Bids.query.filter_by(status='active').all()
+    
+    for bidding in active_biddings:
+        # Check time (5 minutes expiration)
+        # Note: start_time should be timezone-aware if using utc_now
+        time_diff = datetime.now(timezone.utc) - bidding.start_time.replace(tzinfo=timezone.utc)
+        
+        if time_diff > timedelta(minutes=5):
+            print(f"[SYSTEM] Bidding #{bidding.bidding_id} expired. Resolving...")
+            
+            # Find all bids for this session
+            bids = Bid.query.filter_by(bidding_id=bidding.bidding_id).all()
+            
+            if not bids:
+                # No bids? Maybe extend time or notify manager (For now, just leave it active)
+                continue
+                
+            # Find lowest bid
+            winning_bid = min(bids, key=lambda x: x.bid_amount)
+            
+            # 1. Update Order (Assign Employee)
+            order = Orders.query.get(bidding.order_id)
+            order.delivery_person_id = winning_bid.employee_id
+            order.status = 'In Transit'
+            
+            # 2. Update Bidding status
+            bidding.status = 'completed'
+            
+            # 3. Update Bid status
+            winning_bid.is_winning_bid = True
+            
+            db.session.commit()
+            print(f"[SYSTEM] Order #{order.order_id} assigned to Emp #{winning_bid.employee_id} at ${winning_bid.bid_amount}")
 
 
 # Create all tables (commented out since DB is initialized from SQL)
@@ -466,7 +505,7 @@ def login():
 
     token = jwt.encode({
         'email': email,
-        'exp': datetime.now(UTC) + timedelta(hours=24)
+        'exp': datetime.now(timezone.utc) + timedelta(hours=24)
     }, app.secret_key, algorithm='HS256')
 
     return jsonify({
@@ -506,7 +545,7 @@ def employee_login():
     token = jwt.encode({
         'email': email,
         'role': employee.role,
-        'exp': datetime.now(UTC) + timedelta(hours=24)
+        'exp': datetime.now(timezone.utc) + timedelta(hours=24)
     }, app.secret_key, algorithm='HS256')
 
     return jsonify({
@@ -661,6 +700,47 @@ def update_employee(employee_id):
     db.session.commit()
     return jsonify({"success": True, "message": f"Employee {action}d successfully"}), 200
 
+# Update Employee Info (Manager) - Name, Email, Role
+@app.route('/api/manager/employees/<int:employee_id>/info', methods=['PUT'])
+@require_role('Manager')
+def update_employee_info(employee_id):
+    data = request.get_json()
+    employee = Employees.query.get(employee_id)
+    
+    if not employee:
+        return jsonify({"success": False, "message": "Employee not found"}), 404
+
+    try:
+        if 'name' in data:
+            employee.name = data['name']
+        if 'email' in data:
+            employee.email = data['email']
+        if 'role' in data:
+            # Validate role
+            if data['role'] in ['Chef', 'Delivery', 'Manager']:
+                employee.role = data['role']
+        
+        db.session.commit()
+        return jsonify({"success": True, "message": "Employee info updated successfully"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": "Failed to update employee info", "error": str(e)}), 500
+    
+# Delete employee
+@app.route('/api/manager/employees/<int:employee_id>', methods=['DELETE'])
+@require_role('Manager')
+def delete_employee(employee_id):
+    employee = Employees.query.get(employee_id)
+    if not employee:
+        return jsonify({"success": False, "message": "Employee not found"}), 404
+
+    try:
+        db.session.delete(employee)
+        db.session.commit()
+        return jsonify({"success": True, "message": "Employee deleted successfully"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": "Failed to delete employee", "error": str(e)}), 500
 
 # Get all customers (for management)
 @app.route('/api/manager/customers', methods=['GET'])
@@ -671,11 +751,17 @@ def get_customers():
     for cust in customers:
         # Check if VIP
         is_vip = VIP_Customers.query.filter_by(customer_id=cust.customer_id).first() is not None
+        
         customer_list.append({
             "id": cust.customer_id,
             "username": cust.username,
             "email": cust.email,
-            "balance": float(cust.balance) if cust.balance else 0.0,
+            
+            "balance": float(cust.deposited_cash) if cust.deposited_cash else 0.0,
+            
+            
+            "phone_number": cust.phone_number if cust.phone_number else "", 
+            
             "warning_count": cust.warning_count,
             "order_count": cust.order_count,
             "is_vip": is_vip,
@@ -685,10 +771,139 @@ def get_customers():
 
 
     return jsonify({"success": True, "customers": customer_list}), 200
+# Update Customer (Manager) - Specifically for Deposit
+@app.route('/api/manager/customers/<int:customer_id>', methods=['PUT'])
+@require_role('Manager')
+def update_customer_manager(customer_id):
+    data = request.get_json()
+    customer = Customers.query.get(customer_id)
+    
+    if not customer:
+        return jsonify({"success": False, "message": "Customer not found"}), 404
+
+    try:
+        # Update balance (deposit)
+        if 'deposited_cash' in data:
+            customer.deposited_cash = Decimal(str(data['deposited_cash']))
+        
+        # Update other fields if needed
+        if 'username' in data:
+            customer.username = data['username']
+        if 'email' in data:
+            customer.email = data['email']
+        if 'phone_number' in data:
+            customer.phone_number = data['phone_number']
+        
+        # Handle Blacklist status
+        if 'is_blacklisted' in data:
+            customer.is_blacklisted = data['is_blacklisted']
+
+        db.session.commit()
+        return jsonify({"success": True, "message": "Customer updated successfully"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": "Failed to update customer", "error": str(e)}), 500
+    
+# Delete Customer (Manager)
+@app.route('/api/manager/customers/<int:customer_id>', methods=['DELETE'])
+@require_role('Manager')
+def delete_customer_manager(customer_id):
+    customer = Customers.query.get(customer_id)
+    if not customer:
+        return jsonify({"success": False, "message": "Customer not found"}), 404
+        
+    try:
+        # Note: You might need to handle cascading deletes for Orders/Reviews depending on your DB setup
+        # For now, we assume simple deletion or you might prefer soft-delete (blacklisting)
+        db.session.delete(customer)
+        db.session.commit()
+        return jsonify({"success": True, "message": "Customer deleted successfully"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": "Failed to delete customer (User might have associated orders)", "error": str(e)}), 500
+
+# 1. Get all active biddings with details
+@app.route('/api/manager/biddings', methods=['GET'])
+@require_role('Manager')
+def get_manager_biddings():
+    # Resolve any expired ones first
+    resolve_expired_biddings()
+    
+    # Get active biddings
+    active_biddings = Delivery_Bids.query.filter_by(status='active').all()
+    
+    biddings_data = []
+    for b in active_biddings:
+        order = Orders.query.get(b.order_id)
+        # Get all bids for this session
+        bids = Bid.query.filter_by(bidding_id=b.bidding_id).all()
+        
+        bids_info = []
+        for bid in bids:
+            emp = Employees.query.get(bid.employee_id)
+            bids_info.append({
+                "bid_id": bid.bid_id,
+                "employee_id": bid.employee_id,
+                "employee_name": emp.name,
+                "bid_amount": float(bid.bid_amount),
+                "bid_time": bid.bid_time.isoformat()
+            })
+            
+        # Calculate time remaining
+        elapsed = datetime.now(timezone.utc) - b.start_time.replace(tzinfo=timezone.utc)
+        remaining_seconds = max(0, 300 - elapsed.total_seconds()) # 5 mins = 300s
+
+        biddings_data.append({
+            "bidding_id": b.bidding_id,
+            "order_id": b.order_id,
+            "start_time": b.start_time.isoformat(),
+            "remaining_seconds": int(remaining_seconds),
+            "order_total": float(order.total_price),
+            "bids": bids_info
+        })
+        
+    return jsonify({"success": True, "biddings": biddings_data}), 200
+
+# 2. Manual Assignment (Manager Override)
+@app.route('/api/manager/assign', methods=['POST'])
+@require_role('Manager')
+def manager_assign_order():
+    data = request.get_json()
+    bidding_id = data.get('bidding_id')
+    employee_id = data.get('employee_id') # The employee chosen by manager
+    memo = data.get('memo')
+    
+    bidding = Delivery_Bids.query.get(bidding_id)
+    if not bidding or bidding.status != 'active':
+        return jsonify({"success": False, "message": "Bidding session not active"}), 400
+        
+    try:
+        # 1. Assign Order
+        order = Orders.query.get(bidding.order_id)
+        order.delivery_person_id = employee_id
+        order.status = 'In Transit'
+        
+        # 2. Close Bidding
+        bidding.status = 'completed_manually'
+        bidding.end_time = datetime.now(timezone.utc)
+        bidding.memo = memo # Save the manager's memo
+        
+        # 3. Mark the winning bid (if this employee made a bid)
+        # Note: Manager can assign to someone who didn't bid, or someone who did.
+        # If they bid, mark it.
+        user_bid = Bid.query.filter_by(bidding_id=bidding.bidding_id, employee_id=employee_id).first()
+        if user_bid:
+            user_bid.is_winning_bid = True
+            
+        db.session.commit()
+        return jsonify({"success": True, "message": "Order manually assigned successfully"}), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": "Assignment failed", "error": str(e)}), 500
 
 
 # Chef endpoints
-
 # Create new dish
 @app.route('/api/chef/dishes', methods=['POST'])
 @require_role('Chef')
@@ -944,7 +1159,7 @@ def get_profile():
 
 
 
-# Update user profile
+# Update user profile (with Financial Logging for deposits)
 @app.route('/api/auth/profile', methods=['PUT'])
 def update_profile():
     print("[UPDATE_PROFILE] Received update request")
@@ -972,21 +1187,39 @@ def update_profile():
 
         # Update fields if provided
         if 'name' in data:
-            user.name = data['name']
+            user.username = data['name'] # Note: Assuming frontend sends 'name' for username updates
         if 'address' in data:
-            user.address = data['address']
+            # Assuming you might add an address field later, or map it appropriately
+            pass 
+            
         if 'deposited_cash' in data:
             print(f"[UPDATE_PROFILE] Updating deposited_cash: {data['deposited_cash']}")
             try:
                 amount = Decimal(str(data['deposited_cash']))
-                print(f"[UPDATE_PROFILE] Amount to add: {amount}")
-                user.deposited_cash = (user.deposited_cash or Decimal('0')) + amount
-                print(f"[UPDATE_PROFILE] New deposited_cash: {user.deposited_cash}")
+                # Only log positive amounts (add funds)
+                if amount > 0:
+                    print(f"[UPDATE_PROFILE] Amount to add: {amount}")
+                    user.deposited_cash = (user.deposited_cash or Decimal('0')) + amount
+                    print(f"[UPDATE_PROFILE] New deposited_cash: {user.deposited_cash}")
+                    
+                    # --- Financial Log: Record Deposit ---
+                    log = Financial_Log(
+                        customer_id=user.customer_id,
+                        type='Deposit',
+                        amount=amount,
+                        created_at=datetime.now(timezone.utc)
+                    )
+                    db.session.add(log)
+                    print(f"[FINANCE] Logged deposit of ${amount} for User {user.customer_id}")
+                    # -------------------------------------
+
             except (ValueError, TypeError) as e:
                 print(f"[UPDATE_PROFILE] Error converting deposited_cash: {e}")
                 return jsonify({"success": False, "message": "Invalid deposited_cash value"}), 400
+                
         if 'payment_method' in data:
-            user.payment_method = data['payment_method']
+            # user.payment_method = data['payment_method'] # Uncomment if you have this column
+            pass
 
         db.session.commit()
 
@@ -998,11 +1231,10 @@ def update_profile():
                 "username": user.username,
                 "email": user.email,
                 "deposited_cash": float(user.deposited_cash) if user.deposited_cash is not None else None,
-                "payment_method": getattr(user, 'payment_method', None),
-                "created_at": user.created_at.isoformat() if user.created_at else None,
-                "warning_count": user.warning_count,
                 "phone_number": user.phone_number,
-                "order_count": user.order_count
+                "warning_count": user.warning_count,
+                "order_count": user.order_count,
+                "created_at": user.created_at.isoformat() if user.created_at else None,
             }
         }), 200
     except Exception as e:
@@ -1010,13 +1242,12 @@ def update_profile():
         return jsonify({"success": False, "message": "Database error", "error": str(e)}), 500
 
 
-#wei
-# Place order
+# Place order (with Financial Logging for revenue)
 @app.route('/api/orders', methods=['POST'])
 def create_order():
     data = request.get_json()
     
-    # Extract order data   
+    # Extract order data    
     cart_items = data.get('items', [])
     total_price = data.get('totalPrice', 0)
 
@@ -1025,7 +1256,7 @@ def create_order():
         return jsonify({"success": False, "message": "Unauthorized"}), 401
 
     try:
-        # 2. Authenticate user and check balance
+        # Authenticate user and check balance
         token = auth_header.split(' ')[1]
         payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
         user = Customers.query.filter_by(email=payload.get('email')).first()
@@ -1042,27 +1273,24 @@ def create_order():
             db.session.commit()
             return jsonify({"success": False, "message": "Insufficient funds"}), 400
 
-        # 3. Deduct payment
+        # Deduct payment
         user.deposited_cash = current_balance - order_total
         user.order_count = (user.order_count or 0) + 1
         
-        # --- 👇👇👇 New core logic: Create real order 👇👇👇 ---
-
-        # To make the review system work, we need to assign a chef to the order
-        # Here we simply assign it to the first chef found (chef1)
+        # Assign a chef (simple assignment logic for MVP)
         default_chef = Employees.query.filter_by(role='Chef').first()
         chef_id = default_chef.employee_id if default_chef else None
 
         # A. Create order record
         new_order = Orders(
             customer_id=user.customer_id,
-            chef_id=chef_id, # Assign chef
+            chef_id=chef_id, 
             status='Pending',
             total_price=order_total,
-            order_time=datetime.now(UTC)
+            order_time=datetime.now(timezone.utc)
         )
         db.session.add(new_order)
-        db.session.flush() # This step is to immediately generate new_order.order_id
+        db.session.flush() # Generate new_order.order_id immediately
 
         # B. Create order details (Order_Items)
         for item in cart_items:
@@ -1073,14 +1301,26 @@ def create_order():
             )
             db.session.add(order_item)
 
-        # 4. Commit all changes (user deduction + order + order details)
+        # --- Financial Log: Record Order Revenue ---
+        log = Financial_Log(
+            customer_id=user.customer_id,
+            order_id=new_order.order_id,
+            type='Order',
+            amount=Decimal(str(order_total)),
+            created_at=datetime.now(timezone.utc)
+        )
+        db.session.add(log)
+        print(f"[FINANCE] Logged order revenue ${order_total} for Order #{new_order.order_id}")
+        # -------------------------------------------
+
+        # Commit all changes (deduction + order + items + log)
         db.session.commit()
 
         print(f"[SUCCESS] Order #{new_order.order_id} created for {user.username}")
 
         return jsonify({
             "success": True,
-            "orderId": new_order.order_id, # Return the actual numeric ID
+            "orderId": new_order.order_id,
             "message": "Order placed successfully",
             "estimatedDelivery": "30-45 minutes"
         }), 201
@@ -1088,8 +1328,36 @@ def create_order():
     except Exception as e:
         db.session.rollback()
         print(f"[ERROR] Create order failed: {e}")
-        return jsonify({"success": False, "message": "Failed to create order", "error": str(e)}), 500  #wei
-
+        return jsonify({"success": False, "message": "Failed to create order", "error": str(e)}), 500
+    
+# Get financial logs (Manager only)
+@app.route('/api/manager/financials', methods=['GET'])
+@require_role('Manager')
+def get_financial_logs():
+    try:
+        # Join with Customers table to get usernames and emails for the logs
+        logs = db.session.query(Financial_Log, Customers.username, Customers.email)\
+            .join(Customers, Financial_Log.customer_id == Customers.customer_id)\
+            .order_by(Financial_Log.created_at.desc())\
+            .all()
+            
+        logs_data = []
+        for log, username, email in logs:
+            logs_data.append({
+                "log_id": log.log_id,
+                "customer_name": username,
+                "customer_email": email,
+                "type": log.type, # 'Deposit' or 'Order'
+                "amount": float(log.amount),
+                "order_id": log.order_id,
+                "created_at": log.created_at.isoformat()
+            })
+            
+        return jsonify({"success": True, "logs": logs_data}), 200
+    except Exception as e:
+        print(f"Error fetching financial logs: {e}")
+        return jsonify({"success": False, "message": "Failed to fetch logs"}), 500
+    
 # Get user orders wei
 @app.route('/api/orders', methods=['GET'])
 def get_orders():
@@ -1211,28 +1479,47 @@ def get_order_details(order_id):
 @app.route('/api/delivery/available-orders', methods=['GET'])
 @require_role('Delivery')
 def get_available_orders():
-    # Find all orders where status is 'Ready for Delivery' and delivery_person_id is not yet assigned
+    # Trigger system check before showing list
+    resolve_expired_biddings()
+
+    # Get current delivery person
+    auth_header = request.headers.get('Authorization')
+    token = auth_header.split(' ')[1]
+    payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+    me = Employees.query.filter_by(email=payload['email']).first()
+
+    # Find orders that are 'Ready for Delivery' and NOT yet assigned
     orders = Orders.query.filter_by(status='Ready for Delivery', delivery_person_id=None).all()
     
     order_list = []
     for order in orders:
-        # Get customer information to display the address
-        customer = Customers.query.get(order.customer_id)
+        # Check if I have already bid on this order
+        # First, find the active bidding session for this order
+        bidding = Delivery_Bids.query.filter_by(order_id=order.order_id, status='active').first()
         
-        order_list.append({
-            "order_id": order.order_id,
-            "customer_id": order.customer_id,
-            "customer_name": customer.username,
-            "customer_address": "123 Tech Ave (Demo Address)", # If your Customer table has an address field, replace this
-            "status": order.status,
-            "total_price": float(order.total_price),
-            "order_time": order.order_time.isoformat()
-        })
+        has_bid = False
+        if bidding:
+            my_bid = Bid.query.filter_by(bidding_id=bidding.bidding_id, employee_id=me.employee_id).first()
+            if my_bid:
+                has_bid = True
+        
+        # Only show if I haven't bid yet
+        if not has_bid:
+            customer = Customers.query.get(order.customer_id)
+            order_list.append({
+                "order_id": order.order_id,
+                "customer_id": order.customer_id,
+                "customer_name": customer.username,
+                "customer_address": "123 Tech Ave (Demo Address)",
+                "status": order.status,
+                "total_price": float(order.total_price),
+                "order_time": order.order_time.isoformat()
+            })
     
     return jsonify({"success": True, "orders": order_list}), 200
 
 
-# 2. Delivery person bid (Simplified logic: placing a bid automatically accepts the order)
+# 2. Place Bid (Updated: Just record bid, do not auto-assign)
 @app.route('/api/delivery/bid', methods=['POST'])
 @require_role('Delivery')
 def place_delivery_bid():
@@ -1243,45 +1530,43 @@ def place_delivery_bid():
     if not order_id or not bid_amount:
         return jsonify({"success": False, "message": "Missing fields"}), 400
 
-    # Get current delivery person
     auth_header = request.headers.get('Authorization')
     token = auth_header.split(' ')[1]
     payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
     delivery_person = Employees.query.filter_by(email=payload['email']).first()
 
     try:
-        # 1. Create or retrieve Delivery_Bids session
-        bidding = Delivery_Bids.query.filter_by(order_id=order_id).first()
+        # 1. Get or Create active Bidding Session
+        bidding = Delivery_Bids.query.filter_by(order_id=order_id, status='active').first()
+        
         if not bidding:
+            # First bid! Start the 5-minute timer now.
             bidding = Delivery_Bids(
                 order_id=order_id,
-                start_time=datetime.now(UTC),
+                start_time=datetime.now(timezone.utc), # Timer starts here
                 status='active'
             )
             db.session.add(bidding)
             db.session.flush() # Generate ID
+            print(f"[BIDDING] Started for Order #{order_id} at {bidding.start_time}")
 
-        # 2. Record bid (Bid)
+        # 2. Record the Bid
         new_bid = Bid(
             bidding_id=bidding.bidding_id,
             employee_id=delivery_person.employee_id,
             bid_amount=bid_amount,
-            bid_time=datetime.now(UTC),
-            is_winning_bid=True # MVP simplification: set directly as winning bid
+            bid_time=datetime.now(timezone.utc),
+            is_winning_bid=False # Not a winner yet
         )
         db.session.add(new_bid)
-
-        # 3. [Critical] Directly assign the order to this delivery person and change status to "In Transit"
-        order = Orders.query.get(order_id)
-        order.delivery_person_id = delivery_person.employee_id
-        order.status = 'In Transit' # As soon as someone takes the order, delivery starts
-
         db.session.commit()
-        return jsonify({"success": True, "message": "Bid placed and order assigned!"}), 200
+        
+        return jsonify({"success": True, "message": "Bid placed successfully! Waiting for system selection."}), 200
 
     except Exception as e:
         db.session.rollback()
         return jsonify({"success": False, "message": "Failed to place bid", "error": str(e)}), 500
+
 
 
 # 3. Get "my" bid history
@@ -1355,7 +1640,7 @@ def update_delivery_status():
     
     order.status = new_status
     if new_status == 'Delivered':
-        order.completion_time = datetime.now(UTC)
+        order.completion_time = datetime.now(timezone.utc)
     
     db.session.commit()
     return jsonify({"success": True, "message": f"Order status updated to {new_status}"}), 200#wei
@@ -1398,20 +1683,49 @@ def create_review():
         return jsonify({"success": False, "message": "Order already reviewed"}), 400
 
     try:
+        # 1. Save the review first
         review = Reviews(
             order_id=order_id,
             customer_id=user.customer_id,
-            chef_id=order.chef_id, # Assume the order is associated with a chef.
+            chef_id=order.chef_id, 
             delivery_person_id=order.delivery_person_id,
             chef_rating=chef_rating,
             dish_rating=dish_rating,
             delivery_rating=delivery_rating,
             comment=comment,
-            created_at=datetime.now(UTC)
+            created_at=datetime.now(timezone.utc)
         )
         db.session.add(review)
+        # Commit here so the new rating is included in the average calculation below
+        db.session.commit() 
+
+        # 2. Update Chef's Reputation Score
+        if order.chef_id:
+            # Calculate new average rating for the chef
+            avg_chef_rating = db.session.query(db.func.avg(Reviews.chef_rating))\
+                .filter(Reviews.chef_id == order.chef_id).scalar()
+            
+            if avg_chef_rating:
+                chef = Employees.query.get(order.chef_id)
+                # Convert to Decimal and round to 2 decimal places
+                chef.reputation_score = round(Decimal(avg_chef_rating), 2)
+
+        # 3. Update Delivery Person's Reputation Score
+        if order.delivery_person_id:
+            # Calculate new average rating for the delivery person
+            avg_delivery_rating = db.session.query(db.func.avg(Reviews.delivery_rating))\
+                .filter(Reviews.delivery_person_id == order.delivery_person_id).scalar()
+            
+            if avg_delivery_rating:
+                delivery_person = Employees.query.get(order.delivery_person_id)
+                # Convert to Decimal and round to 2 decimal places
+                delivery_person.reputation_score = round(Decimal(avg_delivery_rating), 2)
+
+        # Commit the updates to employee scores
         db.session.commit()
-        return jsonify({"success": True, "message": "Review submitted successfully"}), 201
+
+        return jsonify({"success": True, "message": "Review submitted and scores updated successfully"}), 201
+
     except Exception as e:
         db.session.rollback()
         return jsonify({"success": False, "message": "Failed to save review", "error": str(e)}), 500

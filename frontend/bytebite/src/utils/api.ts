@@ -234,6 +234,41 @@ export const api = {
     
     getAllCustomers: () => fetchAPI("manager/customers"),
 
+
+    // --- Manager: Employee Management ---
+    // Update basic info (Name, Email, Role)
+    updateEmployeeInfo: (employeeId: number, data: any) => {
+        return fetchAPI(`manager/employees/${employeeId}/info`, {
+            method: "PUT",
+            body: JSON.stringify(data),
+        });
+    },
+    // Delete employee
+    deleteEmployee: (employeeId: number) => {
+        return fetchAPI(`manager/employees/${employeeId}`, {
+            method: "DELETE",
+        });
+    },
+
+    // --- Manager: Customer Management ---
+    // Update customer (Balance, Info, Blacklist)
+    updateCustomerManager: (customerId: number, data: any) => {
+        return fetchAPI(`manager/customers/${customerId}`, {
+            method: "PUT",
+            body: JSON.stringify(data),
+        });
+    },
+    // Delete customer
+    deleteCustomerManager: (customerId: number) => {
+        return fetchAPI(`manager/customers/${customerId}`, {
+            method: "DELETE",
+        });
+    },
+
+    getFinancialLogs: () => {
+        return fetchAPI("manager/financials");
+    },
+
     // Delivery operations (Added for Bidding System)
     getAvailableOrders: () => {
         // fetchAPI will automatically use employeeToken because path contains 'delivery'
@@ -260,6 +295,24 @@ export const api = {
             method: "POST",
             body: JSON.stringify({ order_id: orderId, status: status }),
         });
+    },
+    getManagerBiddings: () => {
+        return fetchAPI("manager/biddings");
+    },
+    
+    // Manually assign order (End bidding)
+    managerAssignOrder: (data: { bidding_id: number, employee_id: number, memo: string }) => {
+        return fetchAPI("manager/assign", {
+            method: "POST",
+            body: JSON.stringify(data),
+        });
+    },
+    
+    // Helper: Get list of delivery staff (for manual assignment dropdown)
+    getDeliveryStaff: () => {
+        // We can reuse getEmployees but filter in frontend, or make a new endpoint. 
+        // For now, let's reuse getEmployees and filter by role 'Delivery' in frontend.
+        return fetchAPI("manager/employees");
     },
 
     // Public endpoints for home page

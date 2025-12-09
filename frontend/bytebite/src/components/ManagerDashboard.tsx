@@ -10,8 +10,9 @@ import { Alert, AlertDescription } from './ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../utils/api';
-import { Users, ChefHat, Truck, UserCheck, UserX, Crown } from 'lucide-react';
+import { Users, ChefHat, Truck, Crown, Edit, Trash2, Plus, X, Search, DollarSign, Clock, Gavel, FileText, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
 
+// Interfaces
 interface Employee {
   id: number;
   name: string;
@@ -26,26 +27,82 @@ interface Customer {
   username: string;
   email: string;
   balance: number;
+  deposited_cash: number;
+  phone_number: string;
   warning_count: number;
   order_count: number;
   is_vip: boolean;
   is_blacklisted: boolean;
 }
 
+interface BidInfo {
+    bid_id: number;
+    employee_id: number;
+    employee_name: string;
+    bid_amount: number;
+    bid_time: string;
+}
+
+interface BiddingSession {
+    bidding_id: number;
+    order_id: number;
+    start_time: string;
+    remaining_seconds: number;
+    order_total: number;
+    bids: BidInfo[];
+}
+
+interface FinancialLog {
+    log_id: number;
+    customer_name: string;
+    customer_email: string;
+    type: 'Deposit' | 'Order';
+    amount: number;
+    order_id?: number;
+    created_at: string;
+}
+
 export function ManagerDashboard() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [biddings, setBiddings] = useState<BiddingSession[]>([]);
+  const [financialLogs, setFinancialLogs] = useState<FinancialLog[]>([]);
+  const [deliveryStaff, setDeliveryStaff] = useState<Employee[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const navigate = useNavigate();
 
-  // Hire employee form
-  const [hireForm, setHireForm] = useState({
+  // --- Modal States ---
+  const [showEmployeeModal, setShowEmployeeModal] = useState(false);
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  
+  const [assignModalOpen, setAssignModalOpen] = useState(false);
+  const [selectedBidding, setSelectedBidding] = useState<BiddingSession | null>(null);
+
+  // --- Forms ---
+  const [empForm, setEmpForm] = useState({
+    id: 0,
     name: '',
     email: '',
     password: '',
-    role: ''
+    role: 'Chef'
+  });
+
+  const [custForm, setCustForm] = useState({
+    id: 0,
+    username: '',
+    email: '',
+    phone_number: '',
+    deposited_cash: 0,
+    is_blacklisted: false
+  });
+
+  const [assignForm, setAssignForm] = useState({
+      employee_id: '',
+      memo: ''
   });
 
   useEffect(() => {
@@ -53,22 +110,23 @@ export function ManagerDashboard() {
   }, []);
 
   const loadData = async () => {
-    console.log('ManagerDashboard: Loading data...');
     try {
       setLoading(true);
-      console.log('ManagerDashboard: Calling getEmployees and getAllCustomers');
-      const [employeesRes, customersRes] = await Promise.all([
+      const [employeesRes, customersRes, biddingsRes, financialsRes] = await Promise.all([
         api.getEmployees(),
-        api.getAllCustomers()
+        api.getAllCustomers(),
+        api.getManagerBiddings(),
+        api.getFinancialLogs()
       ]);
-      console.log('ManagerDashboard: API responses received', { employeesRes, customersRes });
 
       if (employeesRes.success) {
-        setEmployees(employeesRes.employees);
+          setEmployees(employeesRes.employees);
+          setDeliveryStaff(employeesRes.employees.filter((e: Employee) => e.role === 'Delivery'));
       }
-      if (customersRes.success) {
-        setCustomers(customersRes.customers);
-      }
+      if (customersRes.success) setCustomers(customersRes.customers);
+      if (biddingsRes.success) setBiddings(biddingsRes.biddings);
+      if (financialsRes.success) setFinancialLogs(financialsRes.logs);
+      
     } catch (err) {
       setError('Failed to load data');
     } finally {
@@ -76,39 +134,111 @@ export function ManagerDashboard() {
     }
   };
 
-  const handleHireEmployee = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const response = await api.hireEmployee(hireForm);
-      if (response.success) {
-        setSuccess('Employee hired successfully');
-        setHireForm({ name: '', email: '', password: '', role: '' });
-        loadData(); // Refresh data
-      } else {
-        setError(response.message || 'Failed to hire employee');
-      }
-    } catch (err) {
-      setError('Failed to hire employee');
-    }
+  // --- Handlers ---
+  const openCreateEmployee = () => { setIsEditing(false); setEmpForm({ id: 0, name: '', email: '', password: '', role: 'Chef' }); setShowEmployeeModal(true); };
+  const openEditEmployee = (emp: Employee) => { setIsEditing(true); setEmpForm({ id: emp.id, name: emp.name, email: emp.email, password: '', role: emp.role }); setShowEmployeeModal(true); };
+  
+  const handleEmployeeSubmit = async (e: React.FormEvent) => { 
+      e.preventDefault(); 
+      try { 
+          let response; 
+          if (isEditing) { 
+              response = await api.updateEmployeeInfo(empForm.id, { name: empForm.name, email: empForm.email, role: empForm.role }); 
+          } else { 
+              response = await api.hireEmployee(empForm); 
+          } 
+          if (response.success) { 
+              setSuccess(isEditing ? 'Employee updated' : 'Employee hired'); 
+              setShowEmployeeModal(false); 
+              loadData(); 
+          } else { 
+              setError(response.message); 
+          } 
+      } catch (err) { 
+          setError('Operation failed'); 
+      } 
   };
 
-  const handleEmployeeAction = async (employeeId: number, action: string) => {
-    try {
-      const response = await api.updateEmployee(employeeId, action);
-      if (response.success) {
-        setSuccess(`Employee ${action}d successfully`);
-        loadData(); // Refresh data
-      } else {
-        setError(response.message || `Failed to ${action} employee`);
-      }
-    } catch (err) {
-      setError(`Failed to ${action} employee`);
-    }
+  const handleEmployeeStatus = async (id: number, action: string) => { 
+      try { 
+          const res = await api.updateEmployee(id, action); 
+          if (res.success) loadData(); 
+      } catch(e) { setError('Failed'); } 
   };
+
+  const handleDeleteEmployee = async (id: number) => { 
+      if(confirm("Delete this employee?")) { 
+          try { 
+              const res = await api.deleteEmployee(id); 
+              if(res.success) loadData(); 
+          } catch(e) { setError('Failed'); } 
+      } 
+  };
+
+  const openEditCustomer = (cust: Customer) => { 
+      setCustForm({ 
+          id: cust.id, 
+          username: cust.username, 
+          email: cust.email, 
+          phone_number: cust.phone_number, 
+          deposited_cash: cust.balance, 
+          is_blacklisted: cust.is_blacklisted 
+      }); 
+      setShowCustomerModal(true); 
+  };
+
+  const handleCustomerSubmit = async (e: React.FormEvent) => { 
+      e.preventDefault(); 
+      try { 
+          const response = await api.updateCustomerManager(custForm.id, { 
+              username: custForm.username, 
+              email: custForm.email, 
+              phone_number: custForm.phone_number, 
+              deposited_cash: parseFloat(custForm.deposited_cash.toString()), 
+              is_blacklisted: custForm.is_blacklisted 
+          }); 
+          if(response.success) { 
+              setSuccess("Customer updated"); 
+              setShowCustomerModal(false); 
+              loadData(); 
+          } else { 
+              setError(response.message); 
+          } 
+      } catch(err) { setError("Failed"); } 
+  };
+
+  const handleDeleteCustomer = async (id: number) => { 
+      if(confirm("Delete this customer?")) { 
+          try { 
+              const res = await api.deleteCustomerManager(id); 
+              if(res.success) loadData(); 
+          } catch(e) { setError('Failed'); } 
+      } 
+  };
+
+  const handleOpenAssign = (b: BiddingSession) => { setSelectedBidding(b); setAssignForm({ employee_id: '', memo: '' }); setAssignModalOpen(true); };
+  
+  const handleAssignSubmit = async (e: React.FormEvent) => { 
+      e.preventDefault(); 
+      if(!selectedBidding) return; 
+      try { 
+          const res = await api.managerAssignOrder({ 
+              bidding_id: selectedBidding.bidding_id, 
+              employee_id: parseInt(assignForm.employee_id), 
+              memo: assignForm.memo 
+          }); 
+          if (res.success) { 
+              setSuccess("Assigned"); 
+              setAssignModalOpen(false); 
+              loadData(); 
+          } 
+      } catch (err) { setError("Failed"); } 
+  };
+
+  const formatTime = (seconds: number) => { if (seconds <= 0) return "Expired"; const m = Math.floor(seconds / 60); const s = seconds % 60; return `${m}:${s.toString().padStart(2, '0')}`; };
 
   const handleLogout = () => {
-    localStorage.removeItem('employeeToken');
-    localStorage.removeItem('employeeData');
+    api.logout();
     navigate('/employee/login');
   };
 
@@ -129,17 +259,12 @@ export function ManagerDashboard() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#0a1628] flex items-center justify-center">
-        <div className="text-white">Loading...</div>
-      </div>
-    );
+  if (loading && employees.length === 0) {
+    return <div className="min-h-screen bg-[#0a1628] flex items-center justify-center"><div className="text-white">Loading...</div></div>;
   }
 
   return (
     <div className="min-h-screen bg-[#0a1628] text-white">
-      {/* Header */}
       <div className="bg-[#0f1f3a] border-b border-[#00ff88]/20 p-4">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-3">
@@ -156,198 +281,293 @@ export function ManagerDashboard() {
       </div>
 
       <div className="max-w-7xl mx-auto p-6">
-        {/* Alerts */}
-        {error && (
-          <Alert className="mb-6 border-red-500/50 bg-red-500/10">
-            <AlertDescription className="text-red-400">{error}</AlertDescription>
-          </Alert>
-        )}
-        {success && (
-          <Alert className="mb-6 border-green-500/50 bg-green-500/10">
-            <AlertDescription className="text-green-400">{success}</AlertDescription>
-          </Alert>
-        )}
+        {error && <Alert className="mb-6 border-red-500/50 bg-red-500/10"><AlertDescription className="text-red-400">{error}</AlertDescription></Alert>}
+        {success && <Alert className="mb-6 border-green-500/50 bg-green-500/10"><AlertDescription className="text-green-400">{success}</AlertDescription></Alert>}
 
-        <Tabs defaultValue="employees" className="space-y-6">
-          <TabsList className="bg-[#0f1f3a] border border-[#00ff88]/20">
-            <TabsTrigger value="employees" className="data-[state=active]:bg-[#00ff88] data-[state=active]:text-[#0a1628]">
-              Employee Management
+        <Tabs defaultValue="financials" className="space-y-6">
+          <TabsList className="bg-[#0f1f3a] border border-[#00ff88]/20 w-full justify-start">
+            <TabsTrigger value="financials" className="flex-1 data-[state=active]:bg-[#00ff88] data-[state=active]:text-[#0a1628]">
+               <FileText className="w-4 h-4 mr-2"/> Financial Audit
             </TabsTrigger>
-            <TabsTrigger value="customers" className="data-[state=active]:bg-[#00ff88] data-[state=active]:text-[#0a1628]">
-              Customer Overview
+            <TabsTrigger value="biddings" className="flex-1 data-[state=active]:bg-[#00ff88] data-[state=active]:text-[#0a1628]">
+               Delivery Bidding
             </TabsTrigger>
-            <TabsTrigger value="hire" className="data-[state=active]:bg-[#00ff88] data-[state=active]:text-[#0a1628]">
-              Hire Employee
+            <TabsTrigger value="employees" className="flex-1 data-[state=active]:bg-[#00ff88] data-[state=active]:text-[#0a1628]">
+               Employee Accounts
+            </TabsTrigger>
+            <TabsTrigger value="customers" className="flex-1 data-[state=active]:bg-[#00ff88] data-[state=active]:text-[#0a1628]">
+               Customer Accounts
             </TabsTrigger>
           </TabsList>
 
-          {/* Employee Management Tab */}
+          {/* --- Tab: Financial Audit --- */}
+          <TabsContent value="financials">
+            <Card className="bg-[#0f1f3a] border-[#00ff88]/20">
+              <div className="p-6">
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-xl font-semibold">Transaction Logs</h2>
+                    <Button onClick={loadData} size="sm" variant="outline" className="border-[#00ff88]/30 text-white">Refresh</Button>
+                </div>
+                <div className="grid md:grid-cols-2 gap-4 mb-6">
+                    <Card className="bg-[#1a2f4a] p-4 border border-[#00ff88]/10">
+                        <p className="text-white/70 text-sm">Total Revenue</p>
+                        <p className="text-2xl font-bold text-[#00ff88]">
+                            ${financialLogs.filter(l => l.type === 'Order').reduce((sum, l) => sum + l.amount, 0).toFixed(2)}
+                        </p>
+                    </Card>
+                    <Card className="bg-[#1a2f4a] p-4 border border-[#00ff88]/10">
+                        <p className="text-white/70 text-sm">Total Deposits</p>
+                        <p className="text-2xl font-bold text-blue-400">
+                            ${financialLogs.filter(l => l.type === 'Deposit').reduce((sum, l) => sum + l.amount, 0).toFixed(2)}
+                        </p>
+                    </Card>
+                </div>
+                <div className="overflow-x-auto">
+                    <Table>
+                    <TableHeader>
+                        <TableRow className="border-[#00ff88]/20">
+                        <TableHead className="text-white h-12 align-middle w-1/5">Date</TableHead>
+                        <TableHead className="text-white h-12 align-middle w-1/6">Type</TableHead>
+                        <TableHead className="text-white h-12 align-middle w-1/4">Customer</TableHead>
+                        <TableHead className="text-white h-12 align-middle w-1/4">Details</TableHead>
+                        <TableHead className="text-white h-12 align-middle w-1/6 text-right">Amount</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {financialLogs.map((log) => (
+                        <TableRow key={log.log_id} className="border-[#00ff88]/10 h-16">
+                            <TableCell className="text-white text-sm align-middle">
+                                {new Date(log.created_at).toLocaleString()}
+                            </TableCell>
+                            <TableCell className="align-middle">
+                                {log.type === 'Deposit' ? (
+                                    <Badge className="bg-blue-500/20 text-blue-300 hover:bg-blue-500/30">
+                                        <ArrowDownLeft className="w-3 h-3 mr-1"/> Deposit
+                                    </Badge>
+                                ) : (
+                                    <Badge className="bg-[#00ff88]/20 text-[#00ff88] hover:bg-[#00ff88]/30">
+                                        <ArrowUpRight className="w-3 h-3 mr-1"/> Order
+                                    </Badge>
+                                )}
+                            </TableCell>
+                            <TableCell className="text-white align-middle">
+                                <div>{log.customer_name}</div>
+                                <div className="text-xs text-white/50">{log.customer_email}</div>
+                            </TableCell>
+                            <TableCell className="text-white/70 text-sm align-middle">
+                                {log.order_id ? `Order #${log.order_id}` : 'Wallet Top-up'}
+                            </TableCell>
+                            <TableCell className="text-right font-mono font-bold text-white align-middle">
+                                ${log.amount.toFixed(2)}
+                            </TableCell>
+                        </TableRow>
+                        ))}
+                        {financialLogs.length === 0 && (
+                            <TableRow><TableCell colSpan={5} className="text-center text-white/50 py-8">No transactions found.</TableCell></TableRow>
+                        )}
+                    </TableBody>
+                    </Table>
+                </div>
+              </div>
+            </Card>
+          </TabsContent>
+
+          {/* Tab: Biddings */}
+          <TabsContent value="biddings">
+             <Card className="bg-[#0f1f3a] border-[#00ff88]/20 p-6">
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-xl font-semibold">Active Bidding Sessions</h2>
+                    <Button onClick={loadData} size="sm" variant="outline" className="border-[#00ff88]/30 text-white">Refresh</Button>
+                </div>
+                {biddings.length === 0 ? <div className="text-center py-12 text-white/50"><Truck className="w-12 h-12 mx-auto mb-4 opacity-50" />No active biddings.</div> : 
+                    <div className="space-y-6">
+                        {biddings.map(b => (
+                            <Card key={b.bidding_id} className="bg-[#1a2f4a] border border-[#00ff88]/20 p-4">
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                            Order #{b.order_id} <Badge variant="outline" className="ml-2 text-[#00ff88] border-[#00ff88]">${b.order_total}</Badge>
+                                        </h3>
+                                        <div className="text-sm text-white/60 mt-1"><Clock className="w-4 h-4 inline mr-1 text-orange-400"/> Time: {formatTime(b.remaining_seconds)}</div>
+                                    </div>
+                                    <Button onClick={() => handleOpenAssign(b)} className="bg-[#00ff88] text-[#0a1628]">Manual Assign</Button>
+                                </div>
+                                <div className="mt-2 bg-[#0a1628] p-2 rounded">
+                                    <p className="text-xs text-white/50 mb-1">Bids: {b.bids.length}</p>
+                                    {b.bids.map(bid => <div key={bid.bid_id} className="text-sm text-white flex justify-between"><span>{bid.employee_name}</span><span className="text-[#00ff88]">${bid.bid_amount}</span></div>)}
+                                </div>
+                            </Card>
+                        ))}
+                    </div>
+                }
+             </Card>
+          </TabsContent>
+
+          {/* Tab: Employees */}
           <TabsContent value="employees">
-            <Card className="bg-[#0f1f3a] border-[#00ff88]/20">
-              <div className="p-6">
-                <h2 className="text-xl font-semibold mb-4">Employee Management</h2>
+            <Card className="bg-[#0f1f3a] border-[#00ff88]/20 p-6">
+                <div className="flex justify-between mb-4"><h2 className="text-xl font-semibold">Employee List</h2><Button onClick={openCreateEmployee} className="bg-[#00ff88] text-[#0a1628]">Hire New</Button></div>
                 <Table>
-                  <TableHeader>
-                    <TableRow className="border-[#00ff88]/20">
-                      <TableHead className="text-white">Name</TableHead>
-                      <TableHead className="text-white">Role</TableHead>
-                      <TableHead className="text-white">Status</TableHead>
-                      <TableHead className="text-white">Reputation</TableHead>
-                      <TableHead className="text-white">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {employees.map((employee) => (
-                      <TableRow key={employee.id} className="border-[#00ff88]/10">
-                        <TableCell className="text-white">{employee.name}</TableCell>
-                        <TableCell className="text-white">
-                          <div className="flex items-center gap-2">
-                            {getRoleIcon(employee.role)}
-                            {employee.role}
-                          </div>
-                        </TableCell>
-                        <TableCell>{getStatusBadge(employee.status)}</TableCell>
-                        <TableCell className="text-white">{employee.reputation_score}/5.0</TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            {employee.status === 'Active' ? (
-                              <>
-                                <Button
-                                  size="sm"
-                                  onClick={() => handleEmployeeAction(employee.id, 'promote')}
-                                  className="bg-green-600 hover:bg-green-700 text-white"
-                                >
-                                  Promote
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  onClick={() => handleEmployeeAction(employee.id, 'fire')}
-                                  className="bg-red-600 hover:bg-red-700 text-white"
-                                >
-                                  Fire
-                                </Button>
-                              </>
-                            ) : (
-                              <Button
-                                size="sm"
-                                onClick={() => handleEmployeeAction(employee.id, 'activate')}
-                                className="bg-blue-600 hover:bg-blue-700 text-white"
-                              >
-                                Reactivate
-                              </Button>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
+                    <TableHeader>
+                        <TableRow className="border-[#00ff88]/20">
+                            <TableHead className="text-white h-12 align-middle w-1/4">Name</TableHead>
+                            <TableHead className="text-white h-12 align-middle w-1/6">Role</TableHead>
+                            <TableHead className="text-white h-12 align-middle w-1/6">Status</TableHead>
+                            <TableHead className="text-white h-12 align-middle w-1/6">Reputation</TableHead>
+                            <TableHead className="text-white h-12 align-middle w-1/4 text-right">Actions</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>{employees.map(e => (
+                        <TableRow key={e.id} className="border-[#00ff88]/10 h-16">
+                            <TableCell className="align-middle text-white">
+                                <div>
+                                    <span className="font-medium">{e.name}</span>
+                                    <div className="text-xs text-white/50">{e.email}</div>
+                                </div>
+                            </TableCell>
+                            <TableCell className="align-middle text-white">
+                                <div className="flex items-center gap-2">
+                                    {getRoleIcon(e.role)} {e.role}
+                                </div>
+                            </TableCell>
+                            <TableCell className="align-middle">
+                                <div>{getStatusBadge(e.status)}</div>
+                            </TableCell>
+                            <TableCell className="align-middle text-white">
+                                <div>{e.reputation_score}/5.0</div>
+                            </TableCell>
+                            <TableCell className="align-middle">
+                                <div className="flex justify-end gap-2 items-center">
+                                    <Button size="sm" variant="outline" onClick={() => openEditEmployee(e)}><Edit className="w-4 h-4"/></Button>
+                                    {e.status === 'Active' ? 
+                                        <Button size="sm" variant="outline" className="text-orange-400" onClick={() => handleEmployeeStatus(e.id, 'fire')}>Fire</Button> : 
+                                        <Button size="sm" variant="outline" className="text-green-400" onClick={() => handleEmployeeStatus(e.id, 'activate')}>Activate</Button>
+                                    }
+                                    <Button size="sm" variant="outline" className="text-red-400" onClick={() => handleDeleteEmployee(e.id)}><Trash2 className="w-4 h-4"/></Button>
+                                </div>
+                            </TableCell>
+                        </TableRow>
+                    ))}</TableBody>
                 </Table>
-              </div>
             </Card>
           </TabsContent>
 
-          {/* Customer Overview Tab */}
+          {/* Tab: Customers */}
           <TabsContent value="customers">
-            <Card className="bg-[#0f1f3a] border-[#00ff88]/20">
-              <div className="p-6">
-                <h2 className="text-xl font-semibold mb-4">Customer Overview</h2>
+            <Card className="bg-[#0f1f3a] border-[#00ff88]/20 p-6">
+                <div className="flex justify-between mb-4"><h2 className="text-xl font-semibold">Customers</h2></div>
                 <Table>
-                  <TableHeader>
-                    <TableRow className="border-[#00ff88]/20">
-                      <TableHead className="text-white">Username</TableHead>
-                      <TableHead className="text-white">Email</TableHead>
-                      <TableHead className="text-white">Balance</TableHead>
-                      <TableHead className="text-white">Orders</TableHead>
-                      <TableHead className="text-white">Warnings</TableHead>
-                      <TableHead className="text-white">Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {customers.map((customer) => (
-                      <TableRow key={customer.id} className="border-[#00ff88]/10">
-                        <TableCell className="text-white">{customer.username}</TableCell>
-                        <TableCell className="text-white">{customer.email}</TableCell>
-                        <TableCell className="text-white">${customer.balance.toFixed(2)}</TableCell>
-                        <TableCell className="text-white">{customer.order_count}</TableCell>
-                        <TableCell className="text-white">{customer.warning_count}</TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            {customer.is_vip && <Badge className="bg-yellow-500 text-white"><Crown className="w-3 h-3 mr-1" />VIP</Badge>}
-                            {customer.is_blacklisted && <Badge className="bg-red-500 text-white">Blacklisted</Badge>}
-                            {!customer.is_blacklisted && !customer.is_vip && <Badge variant="secondary" className="text-white">Regular</Badge>}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
+                    <TableHeader>
+                        <TableRow className="border-[#00ff88]/20">
+                            <TableHead className="text-white h-12 align-middle w-1/4">Customer Info</TableHead>
+                            <TableHead className="text-white h-12 align-middle w-1/6">Balance</TableHead>
+                            <TableHead className="text-white h-12 align-middle w-1/4">Stats</TableHead>
+                            <TableHead className="text-white h-12 align-middle w-1/6">Status</TableHead>
+                            <TableHead className="text-white h-12 align-middle w-1/6 text-right">Actions</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>{customers.map(c => (
+                        <TableRow key={c.id} className="border-[#00ff88]/10 h-16">
+                            <TableCell className="align-middle text-white">
+                                <div>
+                                    <div className="font-medium">{c.username}</div>
+                                    <div className="text-xs text-white/50">{c.email}</div>
+                                    <div className="text-xs text-white/50">{c.phone_number}</div>
+                                </div>
+                            </TableCell>
+                            <TableCell className="align-middle text-[#00ff88] font-bold">
+                                <div>${c.balance.toFixed(2)}</div>
+                            </TableCell>
+                            <TableCell className="align-middle text-white text-sm">
+                                <div>
+                                    <div>Orders: {c.order_count}</div>
+                                    <div className={c.warning_count > 0 ? "text-red-400" : "text-white/50"}>Warnings: {c.warning_count}</div>
+                                </div>
+                            </TableCell>
+                            <TableCell className="align-middle">
+                                <div className="flex gap-2 items-center">
+                                    {c.is_vip && <Badge className="bg-yellow-500 text-white"><Crown className="w-3 h-3 mr-1" />VIP</Badge>}
+                                    {c.is_blacklisted ? <Badge className="bg-red-500 text-white">Blacklisted</Badge> : <Badge variant="outline" className="text-green-400 border-green-400">Active</Badge>}
+                                </div>
+                            </TableCell>
+                            <TableCell className="align-middle">
+                                <div className="flex justify-end gap-2 items-center">
+                                    <Button size="sm" onClick={() => openEditCustomer(c)}>Modify</Button>
+                                    <Button size="sm" variant="outline" className="text-red-400" onClick={() => handleDeleteCustomer(c.id)}><Trash2 className="w-4 h-4"/></Button>
+                                </div>
+                            </TableCell>
+                        </TableRow>
+                    ))}</TableBody>
                 </Table>
-              </div>
             </Card>
           </TabsContent>
 
-          {/* Hire Employee Tab */}
-          <TabsContent value="hire">
-            <Card className="bg-[#0f1f3a] border-[#00ff88]/20">
-              <div className="p-6">
-                <h2 className="text-xl font-semibold mb-4">Hire New Employee</h2>
-                <form onSubmit={handleHireEmployee} className="space-y-4 max-w-md">
-                  <div>
-                    <Label htmlFor="name" className="text-white">Full Name</Label>
-                    <Input
-                      id="name"
-                      value={hireForm.name}
-                      onChange={(e) => setHireForm({...hireForm, name: e.target.value})}
-                      className="bg-[#1a2a3a] border-[#00ff88]/30 text-white"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="email" className="text-white">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={hireForm.email}
-                      onChange={(e) => setHireForm({...hireForm, email: e.target.value})}
-                      className="bg-[#1a2a3a] border-[#00ff88]/30 text-white"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="password" className="text-white">Password</Label>
-                    <Input
-                      id="password"
-                      type="password"
-                      value={hireForm.password}
-                      onChange={(e) => setHireForm({...hireForm, password: e.target.value})}
-                      className="bg-[#1a2a3a] border-[#00ff88]/30 text-white"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="role" className="text-white">Role</Label>
-                    <Select value={hireForm.role} onValueChange={(value) => setHireForm({...hireForm, role: value})}>
-                      <SelectTrigger className="bg-[#1a2a3a] border-[#00ff88]/30 text-white">
-                        <SelectValue placeholder="Select role" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-[#1a2a3a] border-[#00ff88]/30">
-                        <SelectItem value="Chef" className="text-white">Chef</SelectItem>
-                        <SelectItem value="Delivery" className="text-white">Delivery Person</SelectItem>
-                        <SelectItem value="Manager" className="text-white">Manager</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <Button type="submit" className="bg-[#00ff88] hover:bg-[#00dd77] text-[#0a1628]">
-                    Hire Employee
-                  </Button>
-                </form>
-              </div>
-            </Card>
-          </TabsContent>
         </Tabs>
+
+        {/* Modals remain the same... */}
+        {showEmployeeModal && (
+            <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
+                <Card className="bg-[#0f1f3a] border-[#00ff88]/20 max-w-md w-full p-6 relative">
+                    <button onClick={() => setShowEmployeeModal(false)} className="absolute top-4 right-4 text-white/50 hover:text-white"><X className="w-5 h-5"/></button>
+                    <h3 className="text-xl font-bold text-white mb-6">{isEditing ? 'Edit Employee' : 'Hire New Employee'}</h3>
+                    <form onSubmit={handleEmployeeSubmit} className="space-y-4">
+                        <Input value={empForm.name} onChange={e => setEmpForm({...empForm, name: e.target.value})} placeholder="Name" className="bg-[#1a2a3a] text-white" required />
+                        <Input value={empForm.email} onChange={e => setEmpForm({...empForm, email: e.target.value})} placeholder="Email" className="bg-[#1a2a3a] text-white" required />
+                        {!isEditing && <Input type="password" value={empForm.password} onChange={e => setEmpForm({...empForm, password: e.target.value})} placeholder="Password" className="bg-[#1a2a3a] text-white" required />}
+                        <Select value={empForm.role} onValueChange={(val) => setEmpForm({...empForm, role: val})}>
+                            <SelectTrigger className="bg-[#1a2a3a] text-white"><SelectValue placeholder="Role" /></SelectTrigger>
+                            <SelectContent className="bg-[#1a2a3a] text-white">
+                                <SelectItem value="Chef">Chef</SelectItem><SelectItem value="Delivery">Delivery</SelectItem><SelectItem value="Manager">Manager</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <Button type="submit" className="w-full bg-[#00ff88] text-[#0a1628]">{isEditing ? 'Save' : 'Hire'}</Button>
+                    </form>
+                </Card>
+            </div>
+        )}
+
+        {showCustomerModal && (
+            <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
+                <Card className="bg-[#0f1f3a] border-[#00ff88]/20 max-w-md w-full p-6 relative">
+                    <button onClick={() => setShowCustomerModal(false)} className="absolute top-4 right-4 text-white/50 hover:text-white"><X className="w-5 h-5"/></button>
+                    <h3 className="text-xl font-bold text-white mb-6">Modify Customer</h3>
+                    <form onSubmit={handleCustomerSubmit} className="space-y-4">
+                        <Input value={custForm.username} onChange={e => setCustForm({...custForm, username: e.target.value})} placeholder="Username" className="bg-[#1a2a3a] text-white" required />
+                        <Input value={custForm.email} onChange={e => setCustForm({...custForm, email: e.target.value})} placeholder="Email" className="bg-[#1a2a3a] text-white" required />
+                        <Input value={custForm.phone_number} onChange={e => setCustForm({...custForm, phone_number: e.target.value})} placeholder="Phone" className="bg-[#1a2a3a] text-white" />
+                        <div className="bg-[#00ff88]/10 p-4 rounded border border-[#00ff88]/30">
+                            <Label className="text-[#00ff88]">Deposit Balance ($)</Label>
+                            <Input type="number" step="0.01" value={custForm.deposited_cash} onChange={e => setCustForm({...custForm, deposited_cash: parseFloat(e.target.value)})} className="bg-[#0a1628] text-white font-bold mt-2" />
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            <input type="checkbox" checked={custForm.is_blacklisted} onChange={e => setCustForm({...custForm, is_blacklisted: e.target.checked})} />
+                            <Label className="text-red-400">Blacklist Customer</Label>
+                        </div>
+                        <Button type="submit" className="w-full bg-[#00ff88] text-[#0a1628]">Save Changes</Button>
+                    </form>
+                </Card>
+            </div>
+        )}
+
+        {assignModalOpen && (
+            <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
+                <Card className="bg-[#0f1f3a] border-[#00ff88]/20 max-w-md w-full p-6 relative">
+                    <button onClick={() => setAssignModalOpen(false)} className="absolute top-4 right-4 text-white/50 hover:text-white"><X className="w-5 h-5"/></button>
+                    <h3 className="text-xl font-bold text-white mb-6">Assign Order</h3>
+                    <form onSubmit={handleAssignSubmit} className="space-y-4">
+                        <Select value={assignForm.employee_id} onValueChange={(val) => setAssignForm({...assignForm, employee_id: val})}>
+                            <SelectTrigger className="bg-[#1a2a3a] text-white"><SelectValue placeholder="Select Delivery Person" /></SelectTrigger>
+                            <SelectContent className="bg-[#1a2a3a] text-white">
+                                {deliveryStaff.map(e => <SelectItem key={e.id} value={e.id.toString()}>{e.name} (Rep: {e.reputation_score})</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                        <Input value={assignForm.memo} onChange={e => setAssignForm({...assignForm, memo: e.target.value})} placeholder="Memo" className="bg-[#1a2a3a] text-white" />
+                        <Button type="submit" className="w-full bg-[#00ff88] text-[#0a1628]">Confirm</Button>
+                    </form>
+                </Card>
+            </div>
+        )}
+
       </div>
     </div>
   );
