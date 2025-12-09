@@ -10,7 +10,8 @@ import { Alert, AlertDescription } from './ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../utils/api';
-import { ChefHat, Plus, Edit, Trash2, Star } from 'lucide-react';
+// wei: add 'Utensils, Clock, CheckCircle'
+import { ChefHat, Plus, Edit, Trash2, Star, Utensils, Clock, CheckCircle } from 'lucide-react';
 
 interface Dish {
   dish_id: number;
@@ -22,12 +23,32 @@ interface Dish {
   chef_id?: number;
 }
 
+// wei
+interface OrderItem {
+  name: string;
+  quantity: number;
+  image_url: string;
+}
+
+// wei
+interface ChefOrder {
+  order_id: number;
+  status: string;
+  total_price: number;
+  order_time: string;
+  items: OrderItem[];
+  customer_id: number;
+}
+
 export function ChefDashboard() {
   const [dishes, setDishes] = useState<Dish[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const navigate = useNavigate();
+  
+  const [activeOrders, setActiveOrders] = useState<ChefOrder[]>([]); // wei
+  const [reviews, setReviews] = useState<any[]>([]); // wei
 
   // New dish form
   const [newDish, setNewDish] = useState({
@@ -49,12 +70,17 @@ export function ChefDashboard() {
   });
 
   useEffect(() => {
-    loadDishes();
+    loadData();
   }, []);
+
+  const loadData = async () => {
+    setLoading(true);
+    await Promise.all([loadDishes(), loadOrders()]);
+    setLoading(false);
+  };
 
   const loadDishes = async () => {
     try {
-      setLoading(true);
       const response = await api.getChefDishes();
       if (response.success) {
         setDishes(response.dishes);
@@ -62,9 +88,32 @@ export function ChefDashboard() {
         setError(response.message || 'Failed to load dishes');
       }
     } catch (err) {
-      setError('Failed to load dishes');
-    } finally {
-      setLoading(false);
+      console.error('Failed to load dishes');
+    }
+  };
+
+  // wei
+  const loadOrders = async () => {
+    try {
+      const res = await api.getChefOrders();
+      if (res.success) {
+        setActiveOrders(res.orders);
+      }
+    } catch (err) {
+      console.error("Failed to load orders", err);
+    }
+  };
+
+  // wei
+  const handleStatusUpdate = async (orderId: number, newStatus: string) => {
+    try {
+      const res = await api.updateOrderStatus(orderId, newStatus);
+      if (res.success) {
+        setSuccess(`Order #${orderId} moved to ${newStatus}`);
+        loadOrders(); // refresh orders
+      }
+    } catch (err) {
+      setError("Failed to update status");
     }
   };
 
@@ -146,12 +195,11 @@ export function ChefDashboard() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('employeeToken');
-    localStorage.removeItem('employeeData');
+    api.logout(); // 清除所有 token
     navigate('/employee/login');
   };
 
-  if (loading) {
+  if (loading && dishes.length === 0 && activeOrders.length === 0) {
     return (
       <div className="min-h-screen bg-[#0a1628] flex items-center justify-center">
         <div className="text-white">Loading...</div>
@@ -190,8 +238,13 @@ export function ChefDashboard() {
           </Alert>
         )}
 
-        <Tabs defaultValue="dishes" className="space-y-6">
+        {/* The kitchen view is opened by default. */}
+        <Tabs defaultValue="kitchen" className="space-y-6">
           <TabsList className="bg-[#0f1f3a] border border-[#00ff88]/20">
+            {/* 👇👇👇 This fixes the missing "Kitchen" tag that was previously absent. wei 👇👇👇 */}
+            <TabsTrigger value="kitchen" className="data-[state=active]:bg-[#00ff88] data-[state=active]:text-[#0a1628]">
+              Kitchen View
+            </TabsTrigger>
             <TabsTrigger value="dishes" className="data-[state=active]:bg-[#00ff88] data-[state=active]:text-[#0a1628]">
               My Dishes
             </TabsTrigger>
@@ -202,6 +255,79 @@ export function ChefDashboard() {
               Reviews & Ratings
             </TabsTrigger>
           </TabsList>
+
+          {/* 👇👇👇 Kitchen View Content (wei) 👇👇👇 */}
+          <TabsContent value="kitchen">
+            <div className="grid md:grid-cols-2 gap-6">
+                <div className="col-span-2 flex justify-between items-center mb-4">
+                    <h2 className="text-xl font-semibold">Active Orders</h2>
+                    <Button onClick={loadOrders} size="sm" variant="outline" className="border-[#00ff88]/30 text-white">
+                        Refresh Orders
+                    </Button>
+                </div>
+
+                {activeOrders.length === 0 && (
+                <Card className="bg-[#0f1f3a] border-[#00ff88]/20 col-span-2 p-12 text-center">
+                    <Utensils className="w-12 h-12 text-[#00ff88]/20 mx-auto mb-4" />
+                    <p className="text-white/50 text-lg">No active orders.</p>
+                    <p className="text-white/30 text-sm">Wait for customers to place orders!</p>
+                </Card>
+                )}
+
+                {activeOrders.map((order) => (
+                <Card key={order.order_id} className="bg-[#0f1f3a] border-[#00ff88]/20 p-6 shadow-lg shadow-[#00ff88]/5">
+                    <div className="flex justify-between items-start mb-4">
+                    <div>
+                        <h3 className="text-xl font-bold text-white">Order #{order.order_id}</h3>
+                        <div className="flex items-center gap-2 text-white/60 text-sm mt-1">
+                        <Clock className="w-4 h-4" />
+                        {new Date(order.order_time).toLocaleString()}
+                        </div>
+                    </div>
+                    <Badge className={`text-base px-3 py-1 ${order.status === 'Cooking' ? 'bg-orange-500 hover:bg-orange-600' : 'bg-blue-500 hover:bg-blue-600'}`}>
+                        {order.status}
+                    </Badge>
+                    </div>
+
+                    <div className="space-y-3 mb-6 bg-[#1a2f4a] p-4 rounded-lg">
+                    {order.items.map((item, idx) => (
+                        <div key={idx} className="flex justify-between items-center border-b border-[#00ff88]/10 last:border-0 pb-2 last:pb-0">
+                        <span className="text-white font-medium text-lg">{item.name}</span>
+                        <div className="flex items-center">
+                            <span className="text-white/50 text-sm mr-2">Qty:</span>
+                            <Badge variant="outline" className="text-[#00ff88] border-[#00ff88] font-bold text-lg">
+                                {item.quantity}
+                            </Badge>
+                        </div>
+                        </div>
+                    ))}
+                    </div>
+
+                    <div className="flex gap-3">
+                    {order.status === 'Pending' && (
+                        <Button 
+                        onClick={() => handleStatusUpdate(order.order_id, 'Cooking')}
+                        className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold h-12"
+                        >
+                        <Utensils className="w-5 h-5 mr-2" />
+                        Start Cooking
+                        </Button>
+                    )}
+                    
+                    {order.status === 'Cooking' && (
+                        <Button 
+                        onClick={() => handleStatusUpdate(order.order_id, 'Ready for Delivery')}
+                        className="w-full bg-green-500 hover:bg-green-600 text-white font-bold h-12"
+                        >
+                        <CheckCircle className="w-5 h-5 mr-2" />
+                        Mark Ready
+                        </Button>
+                    )}
+                    </div>
+                </Card>
+                ))}
+            </div>
+          </TabsContent>
 
           {/* My Dishes Tab */}
           <TabsContent value="dishes">
@@ -214,7 +340,6 @@ export function ChefDashboard() {
                       <TableHead className="text-white">Name</TableHead>
                       <TableHead className="text-white">Price</TableHead>
                       <TableHead className="text-white">VIP</TableHead>
-                      <TableHead className="text-white">Rating</TableHead>
                       <TableHead className="text-white">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -225,12 +350,6 @@ export function ChefDashboard() {
                         <TableCell className="text-white">${dish.price.toFixed(2)}</TableCell>
                         <TableCell>
                           {dish.is_vip && <Badge className="bg-yellow-500">VIP</Badge>}
-                        </TableCell>
-                        <TableCell className="text-white">
-                          <div className="flex items-center gap-1">
-                            <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                            <span>4.5</span> {/* TODO: Get actual rating */}
-                          </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-2">
@@ -331,13 +450,57 @@ export function ChefDashboard() {
             </Card>
           </TabsContent>
 
-          {/* Reviews & Ratings Tab */}
+          {/* Reviews Tab (wei) */}
           <TabsContent value="reviews">
             <Card className="bg-[#0f1f3a] border-[#00ff88]/20">
               <div className="p-6">
-                <h2 className="text-xl font-semibold mb-4">Dish Reviews & Ratings</h2>
-                <div className="text-white/70">
-                  Reviews and ratings system coming soon...
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-semibold">Dish Reviews & Ratings</h2>
+                  <Button 
+                    onClick={async () => {
+                      try {
+                        const res = await api.getChefReviews();
+                        if (res.success) setReviews(res.reviews);
+                      } catch(e) { console.error(e); }
+                    }}
+                    variant="outline"
+                    size="sm"
+                    className="border-[#00ff88]/30 text-white hover:bg-[#00ff88]/10"
+                  >
+                    Refresh Reviews
+                  </Button>
+                </div>
+
+                <div className="space-y-4 max-h-[500px] overflow-y-auto">
+                  {reviews.length === 0 && (
+                    <div className="text-white/50 text-center py-8">
+                      No reviews received yet.
+                    </div>
+                  )}
+                  
+                  {reviews.map((review) => (
+                    <div key={review.review_id} className="bg-[#1a2f4a] p-4 rounded-lg border border-[#00ff88]/10">
+                      <div className="flex justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[#00ff88] font-bold text-sm">Customer #{review.customer_id}</span>
+                          <div className="flex">
+                            {[...Array(5)].map((_, i) => (
+                              <Star 
+                                key={i} 
+                                className={`w-3 h-3 ${i < review.dish_rating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-600'}`} 
+                              />
+                            ))}
+                          </div>
+                        </div>
+                        <span className="text-white/40 text-xs">{new Date(review.created_at).toLocaleDateString()}</span>
+                      </div>
+                      {review.comment ? (
+                        <p className="text-white/80 text-sm">"{review.comment}"</p>
+                      ) : (
+                        <p className="text-white/30 text-sm italic">No text comment provided</p>
+                      )}
+                    </div>
+                  ))}
                 </div>
               </div>
             </Card>

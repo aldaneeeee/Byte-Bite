@@ -6,80 +6,86 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Separator } from './ui/separator';
 import { api, UserProfile, UpdateProfilePayload } from '../utils/api';
-import { LogOut, Edit2, Check, X, CreditCard } from 'lucide-react';
+import { LogOut, Edit2, Check, X, CreditCard, Star } from 'lucide-react';
+import { ReviewModal } from './ReviewModal';
 
-// Profile Page component - displays and allows editing of user profile
+// Interface for Order data fetched from backend
+interface Order {
+  order_id: number;
+  date: string;
+  total: number;
+  status: string;
+  has_review: boolean;
+}
+
 export function ProfilePage() {
   const navigate = useNavigate();
   const location = useLocation();
+  
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [orders, setOrders] = useState<Order[]>([]); // Store real orders here
+  
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
-  
-  // Form state for editing
   const [formData, setFormData] = useState({
     deposited_cash: 0,
   });
   const [saving, setSaving] = useState(false);
+  const [showReviewModal, setShowReviewModal] = useState<number | null>(null);
 
-  // Load profile on mount
+  // Load profile and orders on mount
   useEffect(() => {
     const authToken = localStorage.getItem('authToken');
     if (!authToken) {
       navigate('/login');
       return;
     }
+    loadData();
+  }, [navigate, location.pathname]);
 
-    const loadProfile = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const response = await api.getProfile();
-        if (response.success && response.user) {
-          setProfile(response.user);
-          setFormData({
-            deposited_cash: response.user.deposited_cash || 0,
-          });
-        }
-      } catch (err) {
-        setError((err as any).message || 'Failed to load profile');
-        console.error('Profile load error:', err);
-      } finally {
-        setLoading(false);
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Fetch Profile and Orders in parallel
+      const [profileRes, ordersRes] = await Promise.all([
+        api.getProfile(),
+        api.getOrders()
+      ]);
+
+      // Handle Profile Data
+      if (profileRes.success && profileRes.user) {
+        setProfile(profileRes.user);
+        setFormData({
+          deposited_cash: profileRes.user.deposited_cash || 0,
+        });
       }
-    };
 
-    loadProfile();
-  }, [navigate, location.pathname + location.search]);
+      // Handle Orders Data
+      if (ordersRes.success) {
+        setOrders(ordersRes.orders);
+      }
 
-  // Re-fetch profile when window gains focus
+    } catch (err) {
+      setError((err as any).message || 'Failed to load data');
+      console.error('Data load error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Re-fetch data when window gains focus (e.g. switching back from another tab)
   useEffect(() => {
     const handleFocus = () => {
       const authToken = localStorage.getItem('authToken');
-      if (authToken) {
-        const loadProfile = async () => {
-          try {
-            const response = await api.getProfile();
-            if (response.success && response.user) {
-              setProfile(response.user);
-              setFormData({
-                deposited_cash: response.user.deposited_cash || 0,
-              });
-            }
-          } catch (err) {
-            console.error('Profile refetch error:', err);
-          }
-        };
-        loadProfile();
-      }
+      if (authToken) loadData();
     };
-
     window.addEventListener('focus', handleFocus);
     return () => window.removeEventListener('focus', handleFocus);
   }, []);
 
-  // Handle form input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
@@ -88,7 +94,6 @@ export function ProfilePage() {
     }));
   }
 
-  // Save profile changes
   const handleSaveProfile = async () => {
     try {
       setSaving(true);
@@ -103,21 +108,16 @@ export function ProfilePage() {
       }
     } catch (err) {
       setError((err as any).message || 'Failed to save profile');
-      console.error('Profile save error:', err);
     } finally {
       setSaving(false);
     }
   };
 
-  // Handle logout
   const handleLogout = () => {
     api.logout();
-    localStorage.removeItem('authToken');
-    localStorage.removeItem('user');
     navigate('/login');
   };
 
-  // Show loading state
   if (loading) {
     return (
       <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center bg-[#0a1628]">
@@ -126,7 +126,6 @@ export function ProfilePage() {
     );
   }
 
-  // Show error state
   if (error && !profile) {
     return (
       <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center bg-[#0a1628]">
@@ -144,14 +143,12 @@ export function ProfilePage() {
     );
   }
 
-  if (!profile) {
-    return null;
-  }
+  if (!profile) return null;
 
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-[#0a1628] py-8">
       <div className="max-w-2xl mx-auto px-4">
-        {/* Profile Header */}
+        {/* Header */}
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold text-white">My Profile</h1>
           <div className="flex gap-4">
@@ -173,14 +170,12 @@ export function ProfilePage() {
           </div>
         </div>
 
-        {/* Error message if any */}
         {error && (
           <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
             <p className="text-red-400">{error}</p>
           </div>
         )}
 
-        {/* Profile Card */}
         <Card className="bg-[#0f1f3a] border-[#00ff88]/20 p-8">
           {/* Account Info Section */}
           <div className="mb-8">
@@ -199,7 +194,6 @@ export function ProfilePage() {
             </div>
 
             <div className="space-y-6">
-              {/* Username (read-only) */}
               <div>
                 <Label className="text-white/70 text-sm">Username</Label>
                 <div className="mt-2 p-3 bg-[#0a1628] rounded-lg border border-[#00ff88]/10">
@@ -207,14 +201,13 @@ export function ProfilePage() {
                 </div>
               </div>
 
-              {/* Phone Number (read-only) */}
               <div>
                 <Label className="text-white/70 text-sm">Phone Number</Label>
                 <div className="mt-2 p-3 bg-[#0a1628] rounded-lg border border-[#00ff88]/10">
                   <p className="text-white font-medium">{profile.phone_number}</p>
                 </div>
               </div>
-              {/* Email (read-only) */}
+
               <div>
                 <Label className="text-white/70 text-sm">Email Address</Label>
                 <div className="mt-2 p-3 bg-[#0a1628] rounded-lg border border-[#00ff88]/10">
@@ -224,11 +217,6 @@ export function ProfilePage() {
 
               <Separator className="bg-[#00ff88]/20" />
 
-              {/* Editable Fields */}
-
-
-              
-              {/* Deposited Cash */}
               <div>
                 <Label htmlFor="deposited_cash" className="text-white/70 text-sm">Deposited Cash Balance</Label>
                 <div className="mt-2 p-3 bg-[#0a1628] rounded-lg border border-[#00ff88]/10">
@@ -236,7 +224,6 @@ export function ProfilePage() {
                 </div>
               </div>
 
-              {/* Warning Count (read-only) */}
               <div>
                 <Label className="text-white/70 text-sm">Warning Count</Label>
                 <div className="mt-2 p-3 bg-[#0a1628] rounded-lg border border-red-500/20">
@@ -244,7 +231,6 @@ export function ProfilePage() {
                 </div>
               </div>
 
-              {/* Order Count (read-only) */}
               <div>
                 <Label className="text-white/70 text-sm">Total Orders</Label>
                 <div className="mt-2 p-3 bg-[#0a1628] rounded-lg border border-[#00ff88]/10">
@@ -253,7 +239,6 @@ export function ProfilePage() {
               </div>
             </div>
 
-            {/* Action Buttons */}
             {isEditing && (
               <div className="mt-8 flex gap-4">
                 <Button
@@ -275,6 +260,71 @@ export function ProfilePage() {
               </div>
             )}
           </div>
+
+          <Separator className="my-8 bg-[#00ff88]/20" />
+  
+          {/* Order History Section */}
+          <h2 className="text-xl font-semibold text-white mb-4">Order History</h2>
+          
+          <div className="space-y-4">
+            {orders.length === 0 && (
+              <p className="text-white/50 text-center py-4">No orders yet.</p>
+            )}
+
+            {orders.map((order) => (
+              <div key={order.order_id} className="bg-[#1a2f4a] p-4 rounded-lg flex justify-between items-center border border-[#00ff88]/10">
+                <div>
+                  <p className="text-white font-medium">Order #{order.order_id}</p>
+                  <p className="text-white/50 text-sm">{order.date} • ${order.total.toFixed(2)}</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className={`text-sm px-2 py-1 rounded ${
+                    order.status === 'Delivered' ? 'bg-green-500/20 text-green-400' : 'bg-blue-500/20 text-blue-400'
+                  }`}>
+                    {order.status}
+                  </span>
+                  
+                  {/* Logic: Only show Rate button if Delivered AND not rated yet */}
+                  {order.status === 'Delivered' && !order.has_review && (
+                    <Button 
+                      size="sm" 
+                      onClick={() => setShowReviewModal(order.order_id)}
+                      className="bg-[#00ff88] text-[#0a1628] hover:bg-[#00dd77]"
+                    >
+                      Rate
+                    </Button>
+                  )}
+
+                  {/* Show Pending text if order is not yet delivered */}
+                  {order.status !== 'Delivered' && !order.has_review && (
+                     <span className="text-white/30 text-sm">
+                       Pending
+                     </span>
+                  )}
+
+                  {/* Logic: Show Rated badge if already rated */}
+                  {order.has_review && (
+                     <span className="text-yellow-400 text-sm flex items-center bg-yellow-400/10 px-2 py-1 rounded">
+                       <Star className="w-3 h-3 mr-1 fill-yellow-400" /> Rated
+                     </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Review Modal */}
+          {showReviewModal && (
+            <ReviewModal 
+              orderId={showReviewModal} 
+              onClose={() => setShowReviewModal(null)}
+              onSuccess={() => {
+                alert('Review Submitted Successfully!');
+                loadData(); // Refresh orders to update the button to "Rated"
+                setShowReviewModal(null);
+              }}
+            />
+          )}
 
         </Card>
       </div>

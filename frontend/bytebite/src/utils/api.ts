@@ -5,7 +5,7 @@ export interface RegisterPayload {
     username: string;
     email: string;
     password: string;
-    phone_number: string;
+    phone_number: string; //wei
 }
 
 export interface LoginPayload {
@@ -39,6 +39,7 @@ export interface UserProfile {
     warning_count: number;
     phone_number: string;
     order_count: number;
+    created_at?: string;
 }
 
 export interface UpdateProfilePayload {
@@ -48,20 +49,6 @@ export interface UpdateProfilePayload {
     payment_method?: string;
 }
 
-export interface EmployeeLoginPayload {
-    email: string;
-    password: string;
-}
-
-export interface EmployeeProfile {
-    id: number;
-    name: string;
-    email: string;
-    role: string;
-    status: string;
-    reputation_score: number;
-}
-
 export interface HireEmployeePayload {
     name: string;
     email: string;
@@ -69,43 +56,42 @@ export interface HireEmployeePayload {
     role: string;
 }
 
+// Token helpers
 const getAuthToken = (): string | null => localStorage.getItem("authToken");
+const getEmployeeToken = (): string | null => localStorage.getItem("employeeToken");
+
 const setAuthToken = (token: string | null) => {
     if (token) localStorage.setItem("authToken", token);
     else localStorage.removeItem("authToken");
 };
 
-const getEmployeeToken = (): string | null => localStorage.getItem("employeeToken");
-
+// Core fetch function
 async function fetchAPI(endpoint: string, options: RequestInit = {}): Promise<any> {
     const url = `${API_BASE_URL}/${endpoint.replace(/^\//, "")}`;
 
-    // Use Headers to safely set fields
+    // Use Headers to safely set fields, wei
     const headers = new Headers(options.headers as HeadersInit);
     if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
 
-    // Check for both customer and employee tokens
     const authToken = getAuthToken();
     const employeeToken = getEmployeeToken();
-    
-    // Determine which token to use based on the endpoint
+
     let tokenToUse = null;
-    if (endpoint.includes('/employee/') || endpoint.includes('/manager/')) {
-        // Employee-specific endpoints
+    
+    // If the request path contains 'chef', 'manager', or 'delivery', prioritize using the employee token.
+    if (endpoint.includes('chef') || endpoint.includes('manager') || endpoint.includes('delivery')) {
         tokenToUse = employeeToken;
-        console.log('Using employee token for endpoint:', endpoint);
     } else {
-        // Customer-specific endpoints or general endpoints
-        tokenToUse = authToken || employeeToken; // Fallback to employee token if no customer token
-        console.log('Using customer token for endpoint:', endpoint, 'token available:', !!tokenToUse);
+        // In other situations (such as orders, profile), the customer token is used. If there is no customer token but there is an employee token (for example, an employee testing an order), a combination of both can also be used.
+        tokenToUse = authToken || employeeToken;
     }
     
     if (tokenToUse) {
         headers.set("Authorization", `Bearer ${tokenToUse}`);
     }
 
-    const response = await fetch(url, { ...options, headers });
-
+    const response = await fetch(url, { ...options, headers }); //wei
+      
     // try to parse JSON body safely
     const text = await response.text();
     let body: any = null;
@@ -136,12 +122,12 @@ export const api = {
     register: async (payload: RegisterPayload) => {
         return fetchAPI("auth/register", {
             method: "POST",
-            body: JSON.stringify({
-                username: payload.username,
-                email: payload.email,
-                password: payload.password,
-                phone_number: payload.phone_number,
-            }),
+            body: JSON.stringify({ 
+                username: payload.username, 
+                email: payload.email, 
+                password: payload.password, 
+                phone_number: payload.phone_number 
+            }), //wei
         });
     },
 
@@ -151,21 +137,16 @@ export const api = {
             body: JSON.stringify({ email: payload.email, password: payload.password }),
         });
         // expect { token: string } or similar
-        if (res && res.token) {
-            // Clear any employee tokens when customer logs in
-            localStorage.removeItem('employeeToken');
-            localStorage.removeItem('employeeData');
-            setAuthToken(res.token);
-        }
+        if (res && res.token) setAuthToken(res.token);
         return res;
     },
 
-    logout: () => {
+    logout: () => { //wei
         localStorage.removeItem('authToken');
         localStorage.removeItem('user');
         localStorage.removeItem('employeeToken');
         localStorage.removeItem('employeeData');
-    },
+    }, //wei
 
     // Profile operations
     getProfile: () => fetchAPI("auth/profile"),
@@ -186,65 +167,91 @@ export const api = {
     // Orders
     getOrders: () => fetchAPI("orders"),
 
-    createOrder: async (order: OrderPayload) => {
-        const result = await fetchAPI("orders", { method: "POST", body: JSON.stringify(order) });
-        // After placing an order, fetch the latest profile to update order_count
-        try {
-            const profile = await fetchAPI("auth/profile");
-            if (profile && profile.success && profile.user) {
-                localStorage.setItem('user', JSON.stringify(profile.user));
-            }
-        } catch {}
-        return result;
+    createOrder: (order: OrderPayload) => fetchAPI("orders", { method: "POST", body: JSON.stringify(order) }),
+    
+    // Reviews //wei
+    createReview: (data: { order_id: number, chef_rating: number, dish_rating: number, comment: string }) => {
+        return fetchAPI("reviews", {
+            method: "POST",
+            body: JSON.stringify(data),
+        });
     },
 
-    // Employee operations
-    employeeLogin: async (email: string, password: string) => {
-        const res = await fetchAPI("auth/employee/login", {
-            method: "POST",
-            body: JSON.stringify({ email, password }),
+    // Chef Operations
+    getChefReviews: () => {
+        return fetchAPI("chef/reviews");
+    },
+    
+    // Get the chef's orders.
+    getChefOrders: () => {
+        // fetchAPI internal logic will automatically detect paths containing "chef" and use employeeToken
+        return fetchAPI("chef/orders"); 
+    },
+
+    // Update order status, wei
+    updateOrderStatus: (orderId: number, status: string) => {
+        return fetchAPI(`chef/orders/${orderId}/status`, {
+            method: "PUT",
+            body: JSON.stringify({ status }),
         });
-        return res;
+    },
+    
+    // Chef Dishes Management 
+    getChefDishes: () => fetchAPI("chef/dishes"),
+    createDish: (dish: any) => fetchAPI("chef/dishes", { method: "POST", body: JSON.stringify(dish) }),
+    updateDish: (id: number, dish: any) => fetchAPI(`chef/dishes/${id}`, { method: "PUT", body: JSON.stringify(dish) }),
+    deleteDish: (id: number) => fetchAPI(`chef/dishes/${id}`, { method: "DELETE" }),
+    
+    // Employee Auth
+    employeeLogin: async (email: string, password: string) => {
+        return fetchAPI("auth/employee/login", {
+            method: "POST",
+            body: JSON.stringify({ email, password })
+        }); //wei
     },
 
     getEmployeeProfile: () => fetchAPI("auth/employee/profile"),
 
     // Manager operations
     getEmployees: () => fetchAPI("manager/employees"),
+    
     hireEmployee: (payload: HireEmployeePayload) => fetchAPI("manager/employees", {
         method: "POST",
         body: JSON.stringify(payload),
     }),
+    
     updateEmployee: (employeeId: number, action: string) => fetchAPI(`manager/employees/${employeeId}`, {
         method: "PUT",
         body: JSON.stringify({ action }),
     }),
+    
     getAllCustomers: () => fetchAPI("manager/customers"),
 
-    // Chef operations
-    getChefDishes: () => fetchAPI("chef/dishes"),
-    createDish: (dish: any) => fetchAPI("chef/dishes", {
-        method: "POST",
-        body: JSON.stringify(dish),
-    }),
-    updateDish: (dishId: number, dish: any) => fetchAPI(`chef/dishes/${dishId}`, {
-        method: "PUT",
-        body: JSON.stringify(dish),
-    }),
-    deleteDish: (dishId: number) => fetchAPI(`chef/dishes/${dishId}`, {
-        method: "DELETE",
-    }),
+    // Delivery operations (Added for Bidding System)
+    getAvailableOrders: () => {
+        // fetchAPI will automatically use employeeToken because path contains 'delivery'
+        return fetchAPI("delivery/available-orders");
+    },
 
-    // Delivery operations
-    getAvailableOrders: () => fetchAPI("delivery/available-orders"),
-    placeDeliveryBid: (orderId: number, bidAmount: number) => fetchAPI("delivery/bid", {
-        method: "POST",
-        body: JSON.stringify({ order_id: orderId, bid_amount: bidAmount }),
-    }),
-    getDeliveryBids: () => fetchAPI("delivery/my-bids"),
-    getDeliveryDeliveries: () => fetchAPI("delivery/my-deliveries"),
-    updateDeliveryStatus: (orderId: number, status: string) => fetchAPI("delivery/update-status", {
-        method: "POST",
-        body: JSON.stringify({ order_id: orderId, status }),
-    }),
+    placeDeliveryBid: (orderId: number, bidAmount: number) => {
+        return fetchAPI("delivery/bid", {
+            method: "POST",
+            body: JSON.stringify({ order_id: orderId, bid_amount: bidAmount }),
+        });
+    },
+
+    getDeliveryBids: () => {
+        return fetchAPI("delivery/my-bids");
+    },
+
+    getDeliveryDeliveries: () => {
+        return fetchAPI("delivery/my-deliveries");
+    },
+
+    updateDeliveryStatus: (orderId: number, status: string) => {
+        return fetchAPI("delivery/update-status", {
+            method: "POST",
+            body: JSON.stringify({ order_id: orderId, status: status }),
+        });
+    },
 };

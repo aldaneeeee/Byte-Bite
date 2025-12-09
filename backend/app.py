@@ -16,6 +16,7 @@ app = Flask(__name__)
 # Enable CORS for all routes
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
+
 # basic config
 basedir = os.path.abspath(os.path.dirname(__file__))
 # Use a real sqlite database file (not the .sql schema file).
@@ -183,8 +184,8 @@ class Financial_Log(db.Model):
 
 
 # Create all tables (commented out since DB is initialized from SQL)
-# with app.app_context():
-#     db.create_all()
+    with app.app_context():#wei
+        db.create_all()
     
     # Seed dishes if not exists
     with app.app_context():
@@ -740,6 +741,76 @@ def get_chef_dishes():
     
     return jsonify({"success": True, "dishes": dish_list}), 200
 
+#wei
+# Get chef's active orders (Pending / Cooking)
+@app.route('/api/chef/orders', methods=['GET'])
+@require_role('Chef')
+def get_chef_orders():
+    # Get current chef information
+    auth_header = request.headers.get('Authorization')
+    token = auth_header.split(' ')[1]
+    payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+    chef = Employees.query.filter_by(email=payload['email']).first()
+
+    # Query orders assigned to this chef that are not yet completed
+    # Note: This filters out 'Delivered', 'Cancelled', etc. statuses
+    active_orders = Orders.query.filter(
+        Orders.chef_id == chef.employee_id,
+        Orders.status.in_(['Pending', 'Cooking'])
+    ).order_by(Orders.order_time).all()
+
+    orders_data = []
+    for order in active_orders:
+        # Get details of dishes included in this order
+        items = []
+        order_items = Order_Items.query.filter_by(order_id=order.order_id).all()
+        for oi in order_items:
+            dish = Dishes.query.get(oi.dish_id)
+            items.append({
+                "name": dish.name,
+                "quantity": oi.quantity,
+                "image_url": dish.image_url
+            })
+
+        orders_data.append({
+            "order_id": order.order_id,
+            "status": order.status,
+            "total_price": float(order.total_price),
+            "order_time": order.order_time.isoformat(),
+            "items": items,  # Contains specific dish list
+            "customer_id": order.customer_id
+        })
+
+    return jsonify({"success": True, "orders": orders_data}), 200 #wei
+
+
+# Update order status
+@app.route('/api/chef/orders/<int:order_id>/status', methods=['PUT'])
+@require_role('Chef')
+def update_order_status(order_id):
+    data = request.get_json()
+    new_status = data.get('status')
+    
+    # Allowed status transitions
+    allowed_statuses = ['Cooking', 'Ready for Delivery']
+    if new_status not in allowed_statuses:
+        return jsonify({"success": False, "message": "Invalid status"}), 400
+
+    order = Orders.query.get(order_id)
+    
+    # Permission check: can only modify own orders
+    auth_header = request.headers.get('Authorization')
+    token = auth_header.split(' ')[1]
+    payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+    chef = Employees.query.filter_by(email=payload['email']).first()
+    
+    if not order or order.chef_id != chef.employee_id:
+        return jsonify({"success": False, "message": "Order not found or unauthorized"}), 404
+
+    order.status = new_status
+    db.session.commit()
+    
+    return jsonify({"success": True, "message": f"Order status updated to {new_status}"}), 200
 
 # Get user profile
 @app.route('/api/auth/profile', methods=['GET'])
@@ -846,227 +917,363 @@ def update_profile():
         db.session.rollback()
         return jsonify({"success": False, "message": "Database error", "error": str(e)}), 500
 
+
+#wei
 # Place order
 @app.route('/api/orders', methods=['POST'])
 def create_order():
     data = request.get_json()
     
-    # Extract order data
+    # Extract order data   
     cart_items = data.get('items', [])
-    delivery_info = data.get('deliveryInfo', {})
     total_price = data.get('totalPrice', 0)
-    
-    auth_header = request.headers.get('Authorization')
-    if auth_header:
-        try:
-            token = auth_header.split(' ')[1] if ' ' in auth_header else auth_header
-            payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
-            email = payload.get('email')
-            user = Customers.query.filter_by(email=email).first()
-            print(f"[ORDERS] Found user: {user.email if user else None}, current order_count: {user.order_count if user else None}")
-            if not user:
-                print(f"[ORDERS] No user found for email: {email}")
-                return jsonify({"success": False, "message": "User not found"}), 404
-            try:
-                deposited_cash = float(user.deposited_cash)
-                order_total = float(total_price)
-            except Exception as e:
-                print(f"[ORDERS] Error converting deposited_cash or total_price: {e}")
-                return jsonify({"success": False, "message": "Invalid deposited_cash or total_price value"}), 400
-            if deposited_cash < order_total:
-                print(f"[ORDERS] Insufficient deposited cash: {deposited_cash} < {order_total}")
-                # Increment warning_count for insufficient balance
-                user.warning_count = (user.warning_count or 0) + 1
-                db.session.add(user)
-                db.session.commit()
-                print(f"[ORDERS] Incremented warning_count to: {user.warning_count}")
-                return jsonify({"success": False, "message": "Insufficient deposited cash balance"}), 400
-            # Deduct order total and increment order_count
-            user.deposited_cash = deposited_cash - order_total
-            user.order_count = (user.order_count or 0) + 1
-            db.session.add(user)
-            db.session.commit()
-            print(f"[ORDERS] New deposited_cash: {user.deposited_cash}, order_count: {user.order_count}")
-        except Exception as e:
-            print(f"Error incrementing order_count in /api/orders: {e}")
-    # Mock order ID
-    order_id = "ORD-" + str(datetime.now().timestamp())
-    return jsonify({
-        "success": True,
-        "orderId": order_id,
-        "message": "Order placed successfully",
-        "estimatedDelivery": "30-45 minutes"
-    }), 201
 
-# Get user orders
+    auth_header = request.headers.get('Authorization')
+    if not auth_header:
+        return jsonify({"success": False, "message": "Unauthorized"}), 401
+
+    try:
+        # 2. Authenticate user and check balance
+        token = auth_header.split(' ')[1]
+        payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+        user = Customers.query.filter_by(email=payload.get('email')).first()
+        
+        if not user:
+            return jsonify({"success": False, "message": "User not found"}), 404
+
+        order_total = float(total_price)
+        current_balance = float(user.deposited_cash or 0)
+
+        if current_balance < order_total:
+            # Record warning for insufficient balance
+            user.warning_count = (user.warning_count or 0) + 1
+            db.session.commit()
+            return jsonify({"success": False, "message": "Insufficient funds"}), 400
+
+        # 3. Deduct payment
+        user.deposited_cash = current_balance - order_total
+        user.order_count = (user.order_count or 0) + 1
+        
+        # --- 👇👇👇 New core logic: Create real order 👇👇👇 ---
+
+        # To make the review system work, we need to assign a chef to the order
+        # Here we simply assign it to the first chef found (chef1)
+        default_chef = Employees.query.filter_by(role='Chef').first()
+        chef_id = default_chef.employee_id if default_chef else None
+
+        # A. Create order record
+        new_order = Orders(
+            customer_id=user.customer_id,
+            chef_id=chef_id, # Assign chef
+            status='Pending',
+            total_price=order_total,
+            order_time=datetime.utcnow()
+        )
+        db.session.add(new_order)
+        db.session.flush() # This step is to immediately generate new_order.order_id
+
+        # B. Create order details (Order_Items)
+        for item in cart_items:
+            order_item = Order_Items(
+                order_id=new_order.order_id,
+                dish_id=int(item['id']),
+                quantity=item['quantity']
+            )
+            db.session.add(order_item)
+
+        # 4. Commit all changes (user deduction + order + order details)
+        db.session.commit()
+
+        print(f"[SUCCESS] Order #{new_order.order_id} created for {user.username}")
+
+        return jsonify({
+            "success": True,
+            "orderId": new_order.order_id, # Return the actual numeric ID
+            "message": "Order placed successfully",
+            "estimatedDelivery": "30-45 minutes"
+        }), 201
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"[ERROR] Create order failed: {e}")
+        return jsonify({"success": False, "message": "Failed to create order", "error": str(e)}), 500  #wei
+
+# Get user orders wei
 @app.route('/api/orders', methods=['GET'])
 def get_orders():
-    # TODO: Get orders from database
-    # For now, return empty list
-    return jsonify([])
+    auth_header = request.headers.get('Authorization')
+    if not auth_header:
+        return jsonify({"success": False, "message": "Unauthorized"}), 401
+    
+    try:
+        # Decode token to get user email
+        token = auth_header.split(' ')[1]
+        payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+        user = Customers.query.filter_by(email=payload['email']).first()
+        
+        if not user:
+            return jsonify({"success": False, "message": "User not found"}), 404
+
+        # Query orders for this customer, newest first
+        orders = Orders.query.filter_by(customer_id=user.customer_id).order_by(Orders.order_time.desc()).all()
+        
+        orders_data = []
+        for order in orders:
+            # Check if this order already has a review in the Reviews table
+            review = Reviews.query.filter_by(order_id=order.order_id).first()
+            
+            orders_data.append({
+                "order_id": order.order_id,
+                "total": float(order.total_price),
+                "status": order.status,
+                # Format date as YYYY-MM-DD
+                "date": order.order_time.strftime('%Y-%m-%d'), 
+                "has_review": review is not None
+            })
+            
+        return jsonify({"success": True, "orders": orders_data}), 200
+        
+    except Exception as e:
+        print(f"Error fetching orders: {e}")
+        return jsonify({"success": False, "message": "Failed to fetch orders"}), 500
 
 
-# Delivery API endpoints
+# Delivery API endpoints wei
 
-# Get available orders for delivery bidding
+# --- 👇👇👇 Replacement for Delivery API endpoints section 👇👇👇 ---
+
+# 1. Get available orders for bidding (Status is 'Ready for Delivery' and no one has taken the order)
 @app.route('/api/delivery/available-orders', methods=['GET'])
 @require_role('Delivery')
 def get_available_orders():
-    try:
-        # Get orders that are ready for delivery and not yet assigned
-        # For now, return mock data
-        orders = [
-            {
-                "order_id": 1,
-                "customer_id": 1,
-                "status": "Ready for Delivery",
-                "total_price": 25.99,
-                "order_time": "2025-12-07T14:30:00Z",
-                "customer_name": "John Doe",
-                "customer_address": "123 Main St, City, State"
-            },
-            {
-                "order_id": 2,
-                "customer_id": 2,
-                "status": "Ready for Delivery",
-                "total_price": 18.50,
-                "order_time": "2025-12-07T15:00:00Z",
-                "customer_name": "Jane Smith",
-                "customer_address": "456 Oak Ave, City, State"
-            }
-        ]
-        return jsonify({"success": True, "orders": orders}), 200
-    except Exception as e:
-        return jsonify({"success": False, "message": "Failed to fetch available orders"}), 500
+    # Find all orders where status is 'Ready for Delivery' and delivery_person_id is not yet assigned
+    orders = Orders.query.filter_by(status='Ready for Delivery', delivery_person_id=None).all()
+    
+    order_list = []
+    for order in orders:
+        # Get customer information to display the address
+        customer = Customers.query.get(order.customer_id)
+        
+        order_list.append({
+            "order_id": order.order_id,
+            "customer_id": order.customer_id,
+            "customer_name": customer.username,
+            "customer_address": "123 Tech Ave (Demo Address)", # If your Customer table has an address field, replace this
+            "status": order.status,
+            "total_price": float(order.total_price),
+            "order_time": order.order_time.isoformat()
+        })
+    
+    return jsonify({"success": True, "orders": order_list}), 200
 
 
-# Place a bid on an order
+# 2. Delivery person bid (Simplified logic: placing a bid automatically accepts the order)
 @app.route('/api/delivery/bid', methods=['POST'])
 @require_role('Delivery')
 def place_delivery_bid():
+    data = request.get_json()
+    order_id = data.get('order_id')
+    bid_amount = data.get('bid_amount')
+
+    if not order_id or not bid_amount:
+        return jsonify({"success": False, "message": "Missing fields"}), 400
+
+    # Get current delivery person
+    auth_header = request.headers.get('Authorization')
+    token = auth_header.split(' ')[1]
+    payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+    delivery_person = Employees.query.filter_by(email=payload['email']).first()
+
     try:
-        data = request.get_json()
-        order_id = data.get('order_id')
-        bid_amount = data.get('bid_amount')
+        # 1. Create or retrieve Delivery_Bids session
+        bidding = Delivery_Bids.query.filter_by(order_id=order_id).first()
+        if not bidding:
+            bidding = Delivery_Bids(
+                order_id=order_id,
+                start_time=datetime.utcnow(),
+                status='active'
+            )
+            db.session.add(bidding)
+            db.session.flush() # Generate ID
 
-        if not order_id or not bid_amount:
-            return jsonify({"success": False, "message": "Order ID and bid amount are required"}), 400
+        # 2. Record bid (Bid)
+        new_bid = Bid(
+            bidding_id=bidding.bidding_id,
+            employee_id=delivery_person.employee_id,
+            bid_amount=bid_amount,
+            bid_time=datetime.utcnow(),
+            is_winning_bid=True # MVP simplification: set directly as winning bid
+        )
+        db.session.add(new_bid)
 
-        # Get delivery person ID from token
-        auth_header = request.headers.get('Authorization')
-        token = auth_header.split(' ')[1] if ' ' in auth_header else auth_header
-        payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
-        email = payload.get('email')
-        delivery_person = Employees.query.filter_by(email=email).first()
+        # 3. [Critical] Directly assign the order to this delivery person and change status to "In Transit"
+        order = Orders.query.get(order_id)
+        order.delivery_person_id = delivery_person.employee_id
+        order.status = 'In Transit' # As soon as someone takes the order, delivery starts
 
-        if not delivery_person or delivery_person.role != 'Delivery':
-            return jsonify({"success": False, "message": "Unauthorized"}), 403
+        db.session.commit()
+        return jsonify({"success": True, "message": "Bid placed and order assigned!"}), 200
 
-        # TODO: Save bid to database
-        # For now, just return success
-        return jsonify({"success": True, "message": "Bid placed successfully"}), 200
     except Exception as e:
-        return jsonify({"success": False, "message": "Failed to place bid"}), 500
+        db.session.rollback()
+        return jsonify({"success": False, "message": "Failed to place bid", "error": str(e)}), 500
 
 
-# Get delivery person's bids
+# 3. Get "my" bid history
 @app.route('/api/delivery/my-bids', methods=['GET'])
 @require_role('Delivery')
 def get_delivery_bids():
-    try:
-        # Get delivery person ID from token
-        auth_header = request.headers.get('Authorization')
-        token = auth_header.split(' ')[1] if ' ' in auth_header else auth_header
-        payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
-        email = payload.get('email')
-        delivery_person = Employees.query.filter_by(email=email).first()
+    auth_header = request.headers.get('Authorization')
+    token = auth_header.split(' ')[1]
+    payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+    delivery_person = Employees.query.filter_by(email=payload['email']).first()
 
-        if not delivery_person or delivery_person.role != 'Delivery':
-            return jsonify({"success": False, "message": "Unauthorized"}), 403
-
-        # TODO: Get bids from database
-        # For now, return mock data
-        bids = [
-            {
-                "bid_id": 1,
-                "order_id": 1,
-                "bid_amount": 3.50,
-                "bid_time": "2025-12-07T14:35:00Z",
-                "is_winning_bid": False
-            },
-            {
-                "bid_id": 2,
-                "order_id": 2,
-                "bid_amount": 2.75,
-                "bid_time": "2025-12-07T15:05:00Z",
-                "is_winning_bid": True
-            }
-        ]
-        return jsonify({"success": True, "bids": bids}), 200
-    except Exception as e:
-        return jsonify({"success": False, "message": "Failed to fetch bids"}), 500
+    bids = Bid.query.filter_by(employee_id=delivery_person.employee_id).order_by(Bid.bid_time.desc()).all()
+    
+    bids_list = []
+    for bid in bids:
+        # Get associated order ID
+        bidding = Delivery_Bids.query.get(bid.bidding_id)
+        bids_list.append({
+            "bid_id": bid.bid_id,
+            "order_id": bidding.order_id,
+            "bid_amount": float(bid.bid_amount),
+            "bid_time": bid.bid_time.isoformat(),
+            "is_winning_bid": bid.is_winning_bid
+        })
+    
+    return jsonify({"success": True, "bids": bids_list}), 200
 
 
-# Get delivery person's active deliveries
+# 4. Get tasks "I" am currently delivering (In Transit)
 @app.route('/api/delivery/my-deliveries', methods=['GET'])
 @require_role('Delivery')
 def get_delivery_deliveries():
-    try:
-        # Get delivery person ID from token
-        auth_header = request.headers.get('Authorization')
-        token = auth_header.split(' ')[1] if ' ' in auth_header else auth_header
-        payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
-        email = payload.get('email')
-        delivery_person = Employees.query.filter_by(email=email).first()
+    auth_header = request.headers.get('Authorization')
+    token = auth_header.split(' ')[1]
+    payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+    delivery_person = Employees.query.filter_by(email=payload['email']).first()
 
-        if not delivery_person or delivery_person.role != 'Delivery':
-            return jsonify({"success": False, "message": "Unauthorized"}), 403
+    # Get orders assigned to me that have not yet become Delivered
+    orders = Orders.query.filter(
+        Orders.delivery_person_id == delivery_person.employee_id,
+        Orders.status == 'In Transit' # Only show what is currently being delivered; delivered items are not shown
+    ).all()
 
-        # TODO: Get active deliveries from database
-        # For now, return mock data
-        deliveries = [
-            {
-                "order_id": 3,
-                "customer_id": 3,
-                "status": "In Transit",
-                "total_price": 32.75,
-                "order_time": "2025-12-07T13:15:00Z",
-                "customer_name": "Bob Johnson",
-                "customer_address": "789 Pine Rd, City, State"
-            }
-        ]
-        return jsonify({"success": True, "deliveries": deliveries}), 200
-    except Exception as e:
-        return jsonify({"success": False, "message": "Failed to fetch deliveries"}), 500
+    deliveries_list = []
+    for order in orders:
+        customer = Customers.query.get(order.customer_id)
+        deliveries_list.append({
+            "order_id": order.order_id,
+            "customer_id": order.customer_id,
+            "customer_name": customer.username,
+            "customer_address": "123 Tech Ave (Demo Address)",
+            "status": order.status,
+            "total_price": float(order.total_price),
+            "order_time": order.order_time.isoformat()
+        })
+
+    return jsonify({"success": True, "deliveries": deliveries_list}), 200
 
 
-# Update delivery status
+# 5. Update delivery status (In Transit -> Delivered)
 @app.route('/api/delivery/update-status', methods=['POST'])
 @require_role('Delivery')
 def update_delivery_status():
+    data = request.get_json()
+    order_id = data.get('order_id')
+    new_status = data.get('status') # Should be 'Delivered'
+
+    order = Orders.query.get(order_id)
+    if not order:
+        return jsonify({"success": False, "message": "Order not found"}), 404
+    
+    order.status = new_status
+    if new_status == 'Delivered':
+        order.completion_time = datetime.utcnow()
+    
+    db.session.commit()
+    return jsonify({"success": True, "message": f"Order status updated to {new_status}"}), 200#wei
+    
+# app.py (添加以下代码)  wei
+
+# 1. 提交评价
+@app.route('/api/reviews', methods=['POST'])
+def create_review():
+    auth_header = request.headers.get('Authorization')
+    if not auth_header:
+        return jsonify({"success": False, "message": "Unauthorized"}), 401
+    
+    # 解析 Token 获取用户 ID
     try:
-        data = request.get_json()
-        order_id = data.get('order_id')
-        new_status = data.get('status')
-
-        if not order_id or not new_status:
-            return jsonify({"success": False, "message": "Order ID and status are required"}), 400
-
-        # Get delivery person ID from token
-        auth_header = request.headers.get('Authorization')
-        token = auth_header.split(' ')[1] if ' ' in auth_header else auth_header
+        token = auth_header.split(' ')[1]
         payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
-        email = payload.get('email')
-        delivery_person = Employees.query.filter_by(email=email).first()
+        user = Customers.query.filter_by(email=payload['email']).first()
+    except:
+        return jsonify({"success": False, "message": "Invalid token"}), 401
 
-        if not delivery_person or delivery_person.role != 'Delivery':
-            return jsonify({"success": False, "message": "Unauthorized"}), 403
+    data = request.get_json()
+    order_id = data.get('order_id')
+    chef_rating = data.get('chef_rating')
+    dish_rating = data.get('dish_rating')
+    comment = data.get('comment')
 
-        # TODO: Update delivery status in database
-        # For now, just return success
-        return jsonify({"success": True, "message": f"Delivery status updated to {new_status}"}), 200
+    # 简单的验证
+    if not all([order_id, chef_rating, dish_rating]):
+        return jsonify({"success": False, "message": "Missing required fields"}), 400
+
+    # 检查订单是否存在且属于该用户
+    order = Orders.query.filter_by(order_id=order_id, customer_id=user.customer_id).first()
+    if not order:
+        return jsonify({"success": False, "message": "Order not found or access denied"}), 404
+
+    # 检查是否已经评价过
+    if Reviews.query.filter_by(order_id=order_id).first():
+        return jsonify({"success": False, "message": "Order already reviewed"}), 400
+
+    try:
+        review = Reviews(
+            order_id=order_id,
+            customer_id=user.customer_id,
+            chef_id=order.chef_id, # 假设订单关联了厨师
+            delivery_person_id=order.delivery_person_id,
+            chef_rating=chef_rating,
+            dish_rating=dish_rating,
+            comment=comment,
+            created_at=datetime.utcnow()
+        )
+        db.session.add(review)
+        db.session.commit()
+        return jsonify({"success": True, "message": "Review submitted successfully"}), 201
     except Exception as e:
-        return jsonify({"success": False, "message": "Failed to update delivery status"}), 500
+        db.session.rollback()
+        return jsonify({"success": False, "message": "Failed to save review", "error": str(e)}), 500
+
+# 2. 获取厨师的评价 (供 ChefDashboard 使用)
+@app.route('/api/chef/reviews', methods=['GET'])
+@require_role('Chef') # 使用你之前定义的装饰器
+def get_chef_reviews():
+    # 获取当前厨师
+    auth_header = request.headers.get('Authorization')
+    token = auth_header.split(' ')[1]
+    payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+    chef = Employees.query.filter_by(email=payload['email']).first()
+
+    # 查询所有关联该厨师的评论
+    reviews = Reviews.query.filter_by(chef_id=chef.employee_id).order_by(Reviews.created_at.desc()).all()
+    
+    review_list = []
+    for r in reviews:
+        # 获取关联的菜品名（这里简化处理，实际可能需要通过 Order_Items 关联查询）
+        review_list.append({
+            "review_id": r.review_id,
+            "dish_rating": r.dish_rating,
+            "comment": r.comment,
+            "created_at": r.created_at.isoformat(),
+            "customer_id": r.customer_id
+        })
+    
+    return jsonify({"success": True, "reviews": review_list}), 200
 
 
 if __name__ == "__main__":
