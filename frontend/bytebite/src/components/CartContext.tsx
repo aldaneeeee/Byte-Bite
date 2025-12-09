@@ -7,6 +7,9 @@ export interface MenuItem {
   price: number;
   image: string;
   description: string;
+  chef_name?: string;
+  rating?: number;
+  is_vip?: boolean;
 }
 
 // Interface for cart items (extends MenuItem with quantity)

@@ -91,6 +91,7 @@ class Employees(db.Model):
     role = db.Column(db.String(20), nullable=False)
     status = db.Column(db.String(20), default='Active')
     reputation_score = db.Column(db.Numeric(3, 2), default=5.00)
+    profile_image_url = db.Column(db.String(255))
     created_at = db.Column(db.DateTime)
 
 class VIP_Customers(db.Model):
@@ -191,12 +192,18 @@ class Financial_Log(db.Model):
     # Seed dishes if not exists
     with app.app_context():
         if Dishes.query.count() == 0:
+            # Get chef IDs for assignment
+            chef_mario = Employees.query.filter_by(email='chef1@bytebite.com').first()
+            chef_luigi = Employees.query.filter_by(email='chef2@bytebite.com').first()
+            
             dishes_data = [
-                {'name': 'Loaded Street Burger', 'price': 12.99, 'description': 'Double patty with special sauce, pickles, and crispy fries', 'image_url': 'https://images.unsplash.com/photo-1687937139478-1743eb2de051?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxidXJnZXIlMjBzdHJlZXQlMjBmb29kfGVufDF8fHx8MTc2MzQ4NDA4MHww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral'},
-                {'name': 'Bao Buns', 'price': 10.99, 'description': 'Soft steamed buns with your choice of filling', 'image_url': 'https://images.unsplash.com/photo-1675096000167-4b8a276b6187?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxiYW8lMjBidW5zfGVufDF8fHx8MTc2MzQ4NDA4Mnww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral'},
-                {'name': 'Fusion Ramen Bowl', 'price': 14.99, 'description': 'Rich broth with handmade noodles, egg, and fresh toppings', 'image_url': 'https://images.unsplash.com/photo-1697652974652-a2336106043b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxyYW1lbiUyMGJvd2x8ZW58MXx8fHwxNzYzNDU2NTY5fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral'},
-                {'name': 'Korean Fried Chicken', 'price': 16.99, 'description': 'Crispy chicken with sweet and spicy glaze', 'image_url': 'https://images.unsplash.com/photo-1626645738196-c2a7c87a8f58?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxmcmllZCUyMGNoaWNrZW58ZW58MXx8fHwxNzYzNDQ1Mjc5fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral'},
-                {'name': 'Street Tacos (3)', 'price': 13.99, 'description': 'Authentic street-style tacos with fresh cilantro and lime', 'image_url': 'https://images.unsplash.com/photo-1648437595587-e6a8b0cdf1f9?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzdHJlZXQlMjB0YWNvc3xlbnwxfHx8fDE3NjM0ODQwODF8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral'},
+                {'name': 'Loaded Street Burger', 'price': 12.99, 'description': 'Double patty with special sauce, pickles, and crispy fries', 'image_url': 'https://images.unsplash.com/photo-1687937139478-1743eb2de051?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxidXJnZXIlMjBzdHJlZXQlMjBmb29kfGVufDF8fHx8MTc2MzQ4NDA4MHww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral', 'chef_id': chef_mario.employee_id if chef_mario else None},
+                {'name': 'Bao Buns', 'price': 10.99, 'description': 'Soft steamed buns with your choice of filling', 'image_url': 'https://images.unsplash.com/photo-1675096000167-4b8a276b6187?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxiYW8lMjBidW5zfGVufDF8fHx8MTc2MzQ4NDA4Mnww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral', 'chef_id': chef_luigi.employee_id if chef_luigi else None},
+                {'name': 'Fusion Ramen Bowl', 'price': 14.99, 'description': 'Rich broth with handmade noodles, egg, and fresh toppings', 'image_url': 'https://images.unsplash.com/photo-1697652974652-a2336106043b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxyYW1lbiUyMGJvd2x8ZW58MXx8fHwxNzYzNDU2NTY5fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral', 'chef_id': chef_mario.employee_id if chef_mario else None},
+                {'name': 'Korean Fried Chicken', 'price': 16.99, 'description': 'Crispy chicken with sweet and spicy glaze', 'image_url': 'https://images.unsplash.com/photo-1626645738196-c2a7c87a8f58?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxmcmllZCUyMGNoaWNrZW58ZW58MXx8fHwxNzYzNDQ1Mjc5fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral', 'chef_id': chef_luigi.employee_id if chef_luigi else None},
+                {'name': 'Street Tacos (3)', 'price': 13.99, 'description': 'Authentic street-style tacos with fresh cilantro and lime', 'image_url': 'https://images.unsplash.com/photo-1648437595587-e6a8b0cdf1f9?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzdHJlZXQlMjB0YWNvc3xlbnwxfHx8fDE3NjM0ODQwODF8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral', 'chef_id': chef_mario.employee_id if chef_mario else None},
+                {'name': 'Truffle Wagyu Burger', 'price': 29.99, 'description': 'Premium wagyu beef with black truffle aioli and gold leaf garnish', 'image_url': 'https://images.unsplash.com/photo-1571091718767-18b5b1457add?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx0cnVmZmxlJTIwYnVyZ2VyfGVufDF8fHx8MTc2MzQ4NDA4M3ww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral', 'is_vip': True, 'chef_id': chef_mario.employee_id if chef_mario else None},
+                {'name': 'Golden Foie Gras', 'price': 45.99, 'description': 'Pan-seared foie gras with edible gold dust and aged balsamic reduction', 'image_url': 'https://images.unsplash.com/photo-1546833999-b9f581a1996d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxmb2llJTIwZ3Jhc3xlbnwxfHx8fDE3NjM0ODQwODR8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral', 'is_vip': True, 'chef_id': chef_luigi.employee_id if chef_luigi else None},
             ]
             for data in dishes_data:
                 dish = Dishes(**data)
@@ -207,15 +214,44 @@ class Financial_Log(db.Model):
     with app.app_context():
         if Employees.query.count() == 0:
             employees_data = [
-                {'name': 'John Manager', 'email': 'manager@bytebite.com', 'password_hash': generate_password_hash('manager123'), 'role': 'Manager'},
-                {'name': 'Chef Mario', 'email': 'chef1@bytebite.com', 'password_hash': generate_password_hash('chef123'), 'role': 'Chef'},
-                {'name': 'Chef Luigi', 'email': 'chef2@bytebite.com', 'password_hash': generate_password_hash('chef123'), 'role': 'Chef'},
-                {'name': 'Delivery Dave', 'email': 'delivery1@bytebite.com', 'password_hash': generate_password_hash('delivery123'), 'role': 'Delivery'},
-                {'name': 'Delivery Sarah', 'email': 'delivery2@bytebite.com', 'password_hash': generate_password_hash('delivery123'), 'role': 'Delivery'},
+                {'name': 'John Manager', 'email': 'manager@bytebite.com', 'password_hash': generate_password_hash('manager123'), 'role': 'Manager', 'profile_image_url': 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtYW5hZ2VyJTIwcHJvZmlsZXxlbnwxfHx8fDE3NjM0ODQwODN8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral'},
+                {'name': 'Chef Mario', 'email': 'chef1@bytebite.com', 'password_hash': generate_password_hash('chef123'), 'role': 'Chef', 'profile_image_url': 'https://images.unsplash.com/photo-1583394838336-acd977736f90?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxpdGFsaWFuJTIwY2hlZnxlbnwxfHx8fDE3NjM0ODQwODR8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral'},
+                {'name': 'Chef Luigi', 'email': 'chef2@bytebite.com', 'password_hash': generate_password_hash('chef123'), 'role': 'Chef', 'profile_image_url': 'https://images.unsplash.com/photo-1559847844-5315695dadae?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxmcmVuY2glMjBjaGVmfGVufDF8fHx8MTc2MzQ4NDA4NXww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral'},
+                {'name': 'Delivery Dave', 'email': 'delivery1@bytebite.com', 'password_hash': generate_password_hash('delivery123'), 'role': 'Delivery', 'profile_image_url': 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxkZWxpdmVyeSUyMGRyaXZlcnxlbnwxfHx8fDE3NjM0ODQwODYgfDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral'},
+                {'name': 'Delivery Sarah', 'email': 'delivery2@bytebite.com', 'password_hash': generate_password_hash('delivery123'), 'role': 'Delivery', 'profile_image_url': 'https://images.unsplash.com/photo-1494790108755-2616b612b786?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxmZW1hbGUlMjBkZWxpdmVyeSUyMGRyaXZlcnxlbnwxfHx8fDE3NjM0ODQwODd8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral'},
             ]
             for data in employees_data:
                 employee = Employees(**data)
                 db.session.add(employee)
+            db.session.commit()
+
+        # Always ensure dishes have chef assignments
+        chef_mario = Employees.query.filter_by(email='chef1@bytebite.com').first()
+        chef_luigi = Employees.query.filter_by(email='chef2@bytebite.com').first()
+        
+        if chef_mario and chef_luigi:
+            # Assign chefs to dishes
+            burger = Dishes.query.filter_by(name='Loaded Street Burger').first()
+            if burger and not burger.chef_id: burger.chef_id = chef_mario.employee_id
+            
+            bao = Dishes.query.filter_by(name='Bao Buns').first()
+            if bao and not bao.chef_id: bao.chef_id = chef_luigi.employee_id
+            
+            ramen = Dishes.query.filter_by(name='Fusion Ramen Bowl').first()
+            if ramen and not ramen.chef_id: ramen.chef_id = chef_mario.employee_id
+            
+            chicken = Dishes.query.filter_by(name='Korean Fried Chicken').first()
+            if chicken and not chicken.chef_id: chicken.chef_id = chef_luigi.employee_id
+            
+            tacos = Dishes.query.filter_by(name='Street Tacos (3)').first()
+            if tacos and not tacos.chef_id: tacos.chef_id = chef_mario.employee_id
+            
+            wagyu = Dishes.query.filter_by(name='Truffle Wagyu Burger').first()
+            if wagyu and not wagyu.chef_id: wagyu.chef_id = chef_luigi.employee_id
+            
+            foie = Dishes.query.filter_by(name='Golden Foie Gras').first()
+            if foie and not foie.chef_id: foie.chef_id = chef_mario.employee_id
+            
             db.session.commit()
 
 @app.route("/")
@@ -287,16 +323,67 @@ def get_menu_item(item_id):
 @app.route('/api/menu', methods=['GET'])
 def get_menu():
     category = request.args.get('category')
-    dishes = Dishes.query.all()
+    
+    # Check if user is authenticated and get VIP status
+    is_vip = False
+    auth_header = request.headers.get('Authorization')
+    if auth_header:
+        try:
+            token = auth_header.split(' ')[1] if ' ' in auth_header else auth_header
+            payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+            email = payload.get('email')
+            
+            # Check if this is a customer (not employee)
+            if 'role' not in payload:
+                customer = Customers.query.filter_by(email=email).first()
+                if customer:
+                    # Check if customer is VIP
+                    vip_customer = VIP_Customers.query.filter_by(customer_id=customer.customer_id).first()
+                    is_vip = vip_customer is not None
+        except Exception as e:
+            # If token is invalid, treat as unauthenticated
+            pass
+    
+    # Get dishes based on VIP status
+    if is_vip:
+        # VIP customers see all dishes
+        dishes = Dishes.query.all()
+    else:
+        # Non-VIP customers and visitors only see non-VIP dishes
+        dishes = Dishes.query.filter_by(is_vip=False).all()
+    
     menu_items = []
     for dish in dishes:
+        # Get chef name if chef_id exists
+        chef_name = None
+        if dish.chef_id:
+            chef = Employees.query.filter_by(employee_id=dish.chef_id).first()
+            if chef:
+                chef_name = chef.name
+        
+        # Calculate average rating for this dish
+        avg_rating = None
+        try:
+            # Get all reviews for orders containing this dish
+            rating_result = db.session.query(db.func.avg(Reviews.dish_rating)).\
+                join(Order_Items, Reviews.order_id == Order_Items.order_id).\
+                filter(Order_Items.dish_id == dish.dish_id).\
+                scalar()
+            if rating_result is not None:
+                avg_rating = round(float(rating_result), 1)
+        except Exception as e:
+            # If there's an error calculating rating, just continue without it
+            pass
+        
         item = {
             'id': str(dish.dish_id),
             'name': dish.name,
             'price': float(dish.price),
             'description': dish.description,
             'image': dish.image_url,
-            'is_vip': dish.is_vip
+            'is_vip': dish.is_vip,
+            'chef_name': chef_name,
+            'rating': avg_rating
         }
         menu_items.append(item)
     
@@ -1039,6 +1126,79 @@ def get_orders():
         return jsonify({"success": False, "message": "Failed to fetch orders"}), 500
 
 
+# Get detailed information for a specific order
+@app.route('/api/orders/<int:order_id>', methods=['GET'])
+def get_order_details(order_id):
+    auth_header = request.headers.get('Authorization')
+    if not auth_header:
+        return jsonify({"success": False, "message": "Unauthorized"}), 401
+    
+    try:
+        # Decode token to get user email
+        token = auth_header.split(' ')[1]
+        payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+        user = Customers.query.filter_by(email=payload['email']).first()
+        
+        if not user:
+            return jsonify({"success": False, "message": "User not found"}), 404
+
+        # Get the order and verify it belongs to this user
+        order = Orders.query.filter_by(order_id=order_id, customer_id=user.customer_id).first()
+        if not order:
+            return jsonify({"success": False, "message": "Order not found"}), 404
+
+        # Get order items with dish details
+        order_items = db.session.query(
+            Order_Items.quantity,
+            Dishes.dish_id,
+            Dishes.name,
+            Dishes.description,
+            Dishes.price,
+            Dishes.image_url,
+            Employees.name.label('chef_name')
+        ).join(Dishes, Order_Items.dish_id == Dishes.dish_id)\
+         .join(Employees, Dishes.chef_id == Employees.employee_id)\
+         .filter(Order_Items.order_id == order_id)\
+         .all()
+
+        items_data = []
+        for item in order_items:
+            items_data.append({
+                'dish_id': item.dish_id,
+                'name': item.name,
+                'description': item.description,
+                'price': float(item.price),
+                'quantity': item.quantity,
+                'image': item.image_url,
+                'chef_name': item.chef_name,
+                'subtotal': float(item.price * item.quantity)
+            })
+
+        # Get delivery person name if assigned
+        delivery_person_name = None
+        if order.delivery_person_id:
+            delivery_person = Employees.query.filter_by(employee_id=order.delivery_person_id).first()
+            if delivery_person:
+                delivery_person_name = delivery_person.name
+
+        order_data = {
+            'order_id': order.order_id,
+            'status': order.status,
+            'total_price': float(order.total_price),
+            'vip_discount': float(order.vip_discount) if order.vip_discount else 0.0,
+            'order_time': order.order_time.isoformat() if order.order_time else None,
+            'completion_time': order.completion_time.isoformat() if order.completion_time else None,
+            'delivery_person_name': delivery_person_name,
+            'items': items_data
+        }
+
+        return jsonify({"success": True, "order": order_data}), 200
+        
+    except Exception as e:
+        print(f"Error fetching order details: {e}")
+        return jsonify({"success": False, "message": "Failed to fetch order details"}), 500
+
+
 # Delivery API endpoints wei
 
 # --- 👇👇👇 Replacement for Delivery API endpoints section 👇👇👇 ---
@@ -1277,6 +1437,286 @@ def get_chef_reviews():
         })
     
     return jsonify({"success": True, "reviews": review_list}), 200
+
+
+# Get featured chefs for home page
+@app.route('/api/chefs/featured', methods=['GET'])
+def get_featured_chefs():
+    try:
+        # Get all chefs with their average ratings
+        chefs = Employees.query.filter_by(role='Chef').all()
+        featured_chefs = []
+        
+        for chef in chefs:
+            # Calculate average chef rating from reviews
+            avg_rating = None
+            try:
+                rating_result = db.session.query(db.func.avg(Reviews.chef_rating)).\
+                    filter(Reviews.chef_id == chef.employee_id).\
+                    scalar()
+                if rating_result is not None:
+                    avg_rating = round(float(rating_result), 1)
+            except Exception as e:
+                pass
+            
+            # Count dishes by this chef
+            dish_count = Dishes.query.filter_by(chef_id=chef.employee_id).count()
+            
+            featured_chefs.append({
+                'employee_id': chef.employee_id,
+                'name': chef.name,
+                'rating': avg_rating,
+                'dish_count': dish_count,
+                'reputation_score': float(chef.reputation_score) if chef.reputation_score else 5.0
+            })
+        
+        # Sort by rating (highest first) and limit to top 3
+        featured_chefs.sort(key=lambda x: x['rating'] or 0, reverse=True)
+        featured_chefs = featured_chefs[:3]
+        
+        return jsonify({"success": True, "chefs": featured_chefs}), 200
+    except Exception as e:
+        return jsonify({"success": False, "message": "Failed to fetch featured chefs"}), 500
+
+
+# Get recent orders for home page display
+@app.route('/api/orders/recent', methods=['GET'])
+def get_recent_orders():
+    try:
+        # Check if user is authenticated
+        auth_header = request.headers.get('Authorization')
+        customer_id = None
+        
+        if auth_header:
+            try:
+                token = auth_header.split(' ')[1] if ' ' in auth_header else auth_header
+                payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+                email = payload.get('email')
+                
+                # Check if this is a customer (not employee)
+                if 'role' not in payload:
+                    customer = Customers.query.filter_by(email=email).first()
+                    if customer:
+                        customer_id = customer.customer_id
+            except Exception as e:
+                # If token is invalid, treat as unauthenticated
+                pass
+        
+        if customer_id:
+            # Return recent orders for this specific customer
+            orders = Orders.query.filter_by(customer_id=customer_id)\
+                .filter(Orders.status.in_(['Delivered', 'In Transit', 'Ready for Delivery']))\
+                .order_by(Orders.order_time.desc())\
+                .limit(6)\
+                .all()
+        else:
+            # Return general recent orders for display (when not logged in)
+            orders = Orders.query\
+                .filter(Orders.status.in_(['Delivered', 'In Transit', 'Ready for Delivery']))\
+                .order_by(Orders.order_time.desc())\
+                .limit(6)\
+                .all()
+        
+        orders_data = []
+        for order in orders:
+            # Get customer name
+            customer = Customers.query.get(order.customer_id)
+            customer_name = customer.username if customer else "Unknown Customer"
+            
+            # Get order items count
+            items_count = Order_Items.query.filter_by(order_id=order.order_id).count()
+            
+            orders_data.append({
+                'order_id': order.order_id,
+                'customer_name': customer_name,
+                'items_count': items_count,
+                'total_price': float(order.total_price),
+                'completion_time': order.order_time.isoformat() if order.order_time else None
+            })
+        
+        return jsonify({"success": True, "orders": orders_data}), 200
+    except Exception as e:
+        return jsonify({"success": False, "message": "Failed to fetch recent orders"}), 500
+@app.route('/api/recommendations', methods=['GET'])
+def get_recommendations():
+    try:
+        # Check if user is authenticated
+        auth_header = request.headers.get('Authorization')
+        customer_id = None
+        is_authenticated = False
+        
+        if auth_header and auth_header.startswith('Bearer '):
+            token = auth_header.split(' ')[1]
+            try:
+                payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+                if payload.get('type') == 'customer':
+                    customer_id = payload.get('customer_id')
+                    is_authenticated = True
+            except jwt.ExpiredSignatureError:
+                pass  # Token expired, treat as unauthenticated
+            except jwt.InvalidTokenError:
+                pass  # Invalid token, treat as unauthenticated
+        
+        if is_authenticated and customer_id:
+            # Personalized recommendations based on user's order history
+            
+            # Get most ordered dishes by this customer
+            most_ordered_query = db.session.query(
+                Dishes.dish_id,
+                Dishes.name,
+                Dishes.description,
+                Dishes.image_url,
+                Dishes.price,
+                db.func.count(Order_Items.dish_id).label('order_count'),
+                Employees.name.label('chef_name'),
+                Employees.profile_image_url
+            ).join(Order_Items, Dishes.dish_id == Order_Items.dish_id)\
+             .join(Orders, Order_Items.order_id == Orders.order_id)\
+             .join(Employees, Dishes.chef_id == Employees.employee_id)\
+             .filter(Orders.customer_id == customer_id)\
+             .filter(Orders.status == 'Delivered')\
+             .group_by(Dishes.dish_id, Dishes.name, Dishes.description, Dishes.image_url, Dishes.price, Employees.name, Employees.profile_image_url)\
+             .order_by(db.func.count(Order_Items.dish_id).desc())\
+             .limit(3)\
+             .all()
+            
+            most_ordered = [{
+                'id': row.dish_id,
+                'name': row.name,
+                'description': row.description,
+                'image': row.image_url,
+                'price': float(row.price),
+                'order_count': row.order_count,
+                'chef': {
+                    'name': row.chef_name,
+                    'profile_image_url': row.profile_image_url
+                }
+            } for row in most_ordered_query]
+            
+            # Get highest rated dishes by this customer
+            highest_rated_query = db.session.query(
+                Dishes.dish_id,
+                Dishes.name,
+                Dishes.description,
+                Dishes.image_url,
+                Dishes.price,
+                db.func.avg(Reviews.dish_rating).label('rating'),
+                db.func.count(Reviews.review_id).label('review_count'),
+                Employees.name.label('chef_name'),
+                Employees.profile_image_url
+            ).join(Order_Items, Dishes.dish_id == Order_Items.dish_id)\
+             .join(Orders, Order_Items.order_id == Orders.order_id)\
+             .join(Reviews, Orders.order_id == Reviews.order_id)\
+             .join(Employees, Dishes.chef_id == Employees.employee_id)\
+             .filter(Orders.customer_id == customer_id)\
+             .group_by(Dishes.dish_id, Dishes.name, Dishes.description, Dishes.image_url, Dishes.price, Employees.name, Employees.profile_image_url)\
+             .order_by(db.func.avg(Reviews.dish_rating).desc())\
+             .limit(3)\
+             .all()
+            
+            highest_rated = [{
+                'id': row.dish_id,
+                'name': row.name,
+                'description': row.description,
+                'image': row.image_url,
+                'price': float(row.price),
+                'rating': round(float(row.rating), 1),
+                'review_count': row.review_count,
+                'chef': {
+                    'name': row.chef_name,
+                    'profile_image_url': row.profile_image_url
+                }
+            } for row in highest_rated_query]
+            
+            return jsonify({
+                "success": True,
+                "recommendations": {
+                    "type": "personalized",
+                    "most_ordered": most_ordered,
+                    "highest_rated": highest_rated
+                }
+            }), 200
+            
+        else:
+            # General recommendations for visitors
+            
+            # Get most popular dishes (most ordered overall)
+            most_popular_query = db.session.query(
+                Dishes.dish_id,
+                Dishes.name,
+                Dishes.description,
+                Dishes.image_url,
+                Dishes.price,
+                db.func.count(Order_Items.dish_id).label('total_orders'),
+                Employees.name.label('chef_name'),
+                Employees.profile_image_url
+            ).join(Order_Items, Dishes.dish_id == Order_Items.dish_id)\
+             .join(Orders, Order_Items.order_id == Orders.order_id)\
+             .join(Employees, Dishes.chef_id == Employees.employee_id)\
+             .filter(Orders.status == 'Delivered')\
+             .group_by(Dishes.dish_id, Dishes.name, Dishes.description, Dishes.image_url, Dishes.price, Employees.name, Employees.profile_image_url)\
+             .order_by(db.func.count(Order_Items.dish_id).desc())\
+             .limit(3)\
+             .all()
+            
+            most_popular = [{
+                'id': row.dish_id,
+                'name': row.name,
+                'description': row.description,
+                'image': row.image_url,
+                'price': float(row.price),
+                'total_orders': row.total_orders,
+                'chef': {
+                    'name': row.chef_name,
+                    'profile_image_url': row.profile_image_url
+                }
+            } for row in most_popular_query]
+            
+            # Get top rated dishes overall
+            top_rated_query = db.session.query(
+                Dishes.dish_id,
+                Dishes.name,
+                Dishes.description,
+                Dishes.image_url,
+                Dishes.price,
+                db.func.avg(Reviews.dish_rating).label('rating'),
+                db.func.count(Reviews.review_id).label('review_count'),
+                Employees.name.label('chef_name'),
+                Employees.profile_image_url
+            ).join(Order_Items, Dishes.dish_id == Order_Items.dish_id)\
+             .join(Reviews, Order_Items.order_id == Reviews.order_id)\
+             .join(Employees, Dishes.chef_id == Employees.employee_id)\
+             .group_by(Dishes.dish_id, Dishes.name, Dishes.description, Dishes.image_url, Dishes.price, Employees.name, Employees.profile_image_url)\
+             .order_by(db.func.avg(Reviews.dish_rating).desc())\
+             .limit(3)\
+             .all()
+            
+            top_rated = [{
+                'id': row.dish_id,
+                'name': row.name,
+                'description': row.description,
+                'image': row.image_url,
+                'price': float(row.price),
+                'rating': round(float(row.rating), 1),
+                'review_count': row.review_count,
+                'chef': {
+                    'name': row.chef_name,
+                    'profile_image_url': row.profile_image_url
+                }
+            } for row in top_rated_query]
+            
+            return jsonify({
+                "success": True,
+                "recommendations": {
+                    "type": "general",
+                    "most_popular": most_popular,
+                    "top_rated": top_rated
+                }
+            }), 200
+            
+    except Exception as e:
+        print(f"Error in get_recommendations: {e}")
+        return jsonify({"success": False, "message": "Failed to fetch recommendations"}), 500
 
 
 if __name__ == "__main__":

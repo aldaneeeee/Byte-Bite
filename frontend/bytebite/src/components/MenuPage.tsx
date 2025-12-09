@@ -103,7 +103,14 @@ export function MenuPage() {
                 alt={item.name}
                 className="w-full h-64 object-cover"
               />
-              {/* Badge showing item is already in cart */}
+              {/* Badges */}
+              <div className="absolute top-4 left-4 flex gap-2">
+                {item.is_vip && (
+                  <Badge className="bg-purple-600 text-white">
+                    VIP Only
+                  </Badge>
+                )}
+              </div>
               {isInCart(item.id) && (
                 <Badge className="absolute top-4 right-4 bg-[#00ff88] text-[#0a1628]">
                   In Cart
@@ -116,8 +123,22 @@ export function MenuPage() {
                 <h3 className="text-white">{item.name}</h3>
                 <span className="text-[#00ff88]">${item.price}</span>
               </div>
-              {/* Item description */}
-              <p className="text-white/70 mb-4">{item.description}</p>
+              {/* Item description with chef and rating info */}
+              <div className="mb-4">
+                <p className="text-white/70 mb-2">{item.description}</p>
+                <div className="flex items-center gap-4 text-sm">
+                  {item.chef_name && (
+                    <span className="text-[#00ff88]/80">
+                      👨‍🍳 Chef: {item.chef_name}
+                    </span>
+                  )}
+                  {item.rating && (
+                    <span className="text-yellow-400">
+                      ⭐ {item.rating}/5
+                    </span>
+                  )}
+                </div>
+              </div>
               {/* Add to cart button */}
               <Button
                 onClick={() => handleAddToCart(item)}
