@@ -20,6 +20,9 @@ export interface MenuItem {
     image?: string;
     description?: string;
     category?: string;
+    chef_name?: string;
+    rating?: number;
+    is_vip?: boolean;
 }
 
 export interface OrderPayload {
@@ -63,6 +66,10 @@ const getEmployeeToken = (): string | null => localStorage.getItem("employeeToke
 const setAuthToken = (token: string | null) => {
     if (token) localStorage.setItem("authToken", token);
     else localStorage.removeItem("authToken");
+};
+
+export const isAuthenticated = (): boolean => {
+    return getAuthToken() !== null || getEmployeeToken() !== null;
 };
 
 // Core fetch function
@@ -254,4 +261,10 @@ export const api = {
             body: JSON.stringify({ order_id: orderId, status: status }),
         });
     },
+
+    // Public endpoints for home page
+    getRecommendations: () => fetchAPI("recommendations"),
+    getFeaturedChefs: () => fetchAPI("chefs/featured"),
+    getRecentOrders: () => fetchAPI("orders"),
+    getOrderDetails: (orderId: number) => fetchAPI(`orders/${orderId}`),
 };

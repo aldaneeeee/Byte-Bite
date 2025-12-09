@@ -8,6 +8,7 @@ import { Separator } from './ui/separator';
 import { api, UserProfile, UpdateProfilePayload } from '../utils/api';
 import { LogOut, Edit2, Check, X, CreditCard, Star } from 'lucide-react';
 import { ReviewModal } from './ReviewModal';
+import { OrderDetailsModal } from './OrderDetailsModal';
 
 // Interface for Order data fetched from backend
 interface Order {
@@ -33,6 +34,8 @@ export function ProfilePage() {
   });
   const [saving, setSaving] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState<number | null>(null);
+  const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
+  const [orderModalOpen, setOrderModalOpen] = useState(false);
 
   // Load profile and orders on mount
   useEffect(() => {
@@ -116,6 +119,17 @@ export function ProfilePage() {
   const handleLogout = () => {
     api.logout();
     navigate('/login');
+  };
+
+  const handleOrderClick = (orderId: number) => {
+    console.log('ProfilePage: Order clicked with orderId:', orderId);
+    setSelectedOrderId(orderId);
+    setOrderModalOpen(true);
+  };
+
+  const handleCloseOrderModal = () => {
+    setOrderModalOpen(false);
+    setSelectedOrderId(null);
   };
 
   if (loading) {
@@ -272,7 +286,11 @@ export function ProfilePage() {
             )}
 
             {orders.map((order) => (
-              <div key={order.order_id} className="bg-[#1a2f4a] p-4 rounded-lg flex justify-between items-center border border-[#00ff88]/10">
+              <div 
+                key={order.order_id} 
+                className="bg-[#1a2f4a] p-4 rounded-lg flex justify-between items-center border border-[#00ff88]/10 cursor-pointer hover:border-[#00ff88]/30 transition-colors"
+                onClick={() => handleOrderClick(order.order_id)}
+              >
                 <div>
                   <p className="text-white font-medium">Order #{order.order_id}</p>
                   <p className="text-white/50 text-sm">{order.date} • ${order.total.toFixed(2)}</p>
@@ -328,6 +346,12 @@ export function ProfilePage() {
 
         </Card>
       </div>
+
+      <OrderDetailsModal
+        orderId={selectedOrderId}
+        isOpen={orderModalOpen}
+        onClose={handleCloseOrderModal}
+      />
     </div>
   );
 }

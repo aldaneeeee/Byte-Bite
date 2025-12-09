@@ -28,6 +28,7 @@ CREATE TABLE Employees (
     role VARCHAR(20) NOT NULL CHECK (role IN ('Manager', 'Chef', 'Delivery')),
     status VARCHAR(20) DEFAULT 'Active',
     reputation_score DECIMAL(3, 2) DEFAULT 5.00 CHECK (reputation_score >= 0 AND reputation_score <= 5),
+    profile_image_url VARCHAR(255),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP --sample:2024-01-15 14:30:25
 ); -- [cite: 297, 308, 375]
 
