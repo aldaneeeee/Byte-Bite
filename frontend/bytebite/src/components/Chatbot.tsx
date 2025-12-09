@@ -129,6 +129,8 @@ export function Chatbot() {
 
     // Default response
     return 'I\'m here to help! You can ask me about our menu items, delivery times, hours of operation, payment methods, dietary options, or how to create an account. What would you like to know?';
+    //*/
+    // Working on api call integration tomorrow
   };
 
   return (

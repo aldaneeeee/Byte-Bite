@@ -1,0 +1,52 @@
+[
+    {
+        "topic": "Menu",
+        "question_keywords": ["menu", "food", "dish"],
+        "answer": "We have an amazing menu of tech-themed street food! Popular items include the Code Burger, Async Ramen, Debug Tacos, and Binary Pizza. You can view our full menu by clicking the 'Menu' link in the navigation bar. Is there a specific type of food you're interested in?"
+    },
+    {
+        "topic": "Delivery",
+        "question_keywords": ["deliver", "shipping", "time"],
+        "answer": "We typically deliver within 30-45 minutes depending on your location. We cover most areas within a 10-mile radius. You can check if we deliver to your area by going to checkout and entering your address!"
+    },
+    {
+        "topic": "Hours",
+        "question_keywords": ["hour", "open", "close"],
+        "answer": "We're open Monday-Saturday from 11:00 AM to 10:00 PM, and Sunday from 12:00 PM to 9:00 PM. Online ordering is available during these hours!"
+    },
+    {
+        "topic": "Pricing",
+        "question_keywords": ["price", "cost", "expensive"],
+        "answer": "Our menu items range from $8 to $18. We also offer combo deals and daily specials! Check out the menu page to see current prices and any ongoing promotions."
+    },
+    {
+        "topic": "Account",
+        "question_keywords": ["account", "login", "sign up"],
+        "answer": "You can create an account or login by clicking the user icon in the top right corner. Having an account lets you save your favorite orders, track deliveries, and join our community forum!"
+    },
+    {
+        "topic": "Payment",
+        "question_keywords": ["payment", "pay", "credit card"],
+        "answer": "We accept all major credit cards, debit cards, and digital payment methods like Apple Pay and Google Pay. Payment is processed securely at checkout."
+    },
+    {
+        "topic": "Dietary/Allergies",
+        "question_keywords": ["vegan", "vegetarian", "gluten", "allerg"],
+        "answer": "We offer several vegetarian options and are working on expanding our vegan menu. If you have specific dietary restrictions or allergies, please mention them in the special instructions at checkout, and our kitchen will do their best to accommodate!"
+    },
+    {
+        "topic": "Forum/Community",
+        "question_keywords": ["forum", "community", "discuss"],
+        "answer": "We have an active community forum where users can share reviews, ask questions, and make suggestions! You need to be logged in to access the forum. Just create a free account to join the conversation!"
+    },
+    {
+        "topic": "Specials/Deals",
+        "question_keywords": ["special", "deal", "discount", "promo"],
+        "answer": "We run special promotions regularly! Check our home page for current deals, and make sure to create an account to receive exclusive offers and updates about new menu items."
+    },
+    {
+        "topic": "Default",
+        "question_keywords": ["default"],
+        "answer": "I'm here to help! You can ask me about our menu items, delivery times, hours of operation, payment methods, dietary options, or how to create an account. What would you like to know?"
+    }
+]
