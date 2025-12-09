@@ -4,12 +4,16 @@ import sqlite3
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, g
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime, timedelta 
+from datetime import datetime, timedelta, UTC 
 import jwt
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 from decimal import Decimal
 #import DB language 
+
+def utc_now():
+    """Return current UTC datetime (timezone-aware)"""
+    return datetime.now(UTC)
 
 app = Flask(__name__)
 
@@ -109,7 +113,7 @@ class Orders(db.Model):
     status = db.Column(db.String(20), default='Pending')
     total_price = db.Column(db.Numeric(10, 2), nullable=False)
     vip_discount = db.Column(db.Numeric(10, 2), default=0.00)
-    order_time = db.Column(db.DateTime, default=datetime.utcnow)
+    order_time = db.Column(db.DateTime, default=utc_now)
     completion_time = db.Column(db.DateTime)
 
 class Order_Items(db.Model):
@@ -122,7 +126,7 @@ class Delivery_Bids(db.Model):
     __tablename__ = 'Delivery_Bids'
     bidding_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     order_id = db.Column(db.Integer, db.ForeignKey('Orders.order_id'), nullable=False)
-    start_time = db.Column(db.DateTime, default=datetime.utcnow)
+    start_time = db.Column(db.DateTime, default=utc_now)
     end_time = db.Column(db.DateTime)
     memo = db.Column(db.Text)
     status = db.Column(db.String(20), default='created')
@@ -133,7 +137,7 @@ class Bid(db.Model):
     bidding_id = db.Column(db.Integer, db.ForeignKey('Delivery_Bids.bidding_id'), nullable=False)
     employee_id = db.Column(db.Integer, db.ForeignKey('Employees.employee_id'), nullable=False)
     bid_amount = db.Column(db.Numeric(10, 2), nullable=False)
-    bid_time = db.Column(db.DateTime, default=datetime.utcnow)
+    bid_time = db.Column(db.DateTime, default=utc_now)
     is_winning_bid = db.Column(db.Boolean, default=False)
 
 class Reviews(db.Model):
@@ -462,7 +466,7 @@ def login():
 
     token = jwt.encode({
         'email': email,
-        'exp': datetime.utcnow() + timedelta(hours=24)
+        'exp': datetime.now(UTC) + timedelta(hours=24)
     }, app.secret_key, algorithm='HS256')
 
     return jsonify({
@@ -502,7 +506,7 @@ def employee_login():
     token = jwt.encode({
         'email': email,
         'role': employee.role,
-        'exp': datetime.utcnow() + timedelta(hours=24)
+        'exp': datetime.now(UTC) + timedelta(hours=24)
     }, app.secret_key, algorithm='HS256')
 
     return jsonify({
@@ -1055,7 +1059,7 @@ def create_order():
             chef_id=chef_id, # Assign chef
             status='Pending',
             total_price=order_total,
-            order_time=datetime.utcnow()
+            order_time=datetime.now(UTC)
         )
         db.session.add(new_order)
         db.session.flush() # This step is to immediately generate new_order.order_id
@@ -1251,7 +1255,7 @@ def place_delivery_bid():
         if not bidding:
             bidding = Delivery_Bids(
                 order_id=order_id,
-                start_time=datetime.utcnow(),
+                start_time=datetime.now(UTC),
                 status='active'
             )
             db.session.add(bidding)
@@ -1262,7 +1266,7 @@ def place_delivery_bid():
             bidding_id=bidding.bidding_id,
             employee_id=delivery_person.employee_id,
             bid_amount=bid_amount,
-            bid_time=datetime.utcnow(),
+            bid_time=datetime.now(UTC),
             is_winning_bid=True # MVP simplification: set directly as winning bid
         )
         db.session.add(new_bid)
@@ -1351,7 +1355,7 @@ def update_delivery_status():
     
     order.status = new_status
     if new_status == 'Delivered':
-        order.completion_time = datetime.utcnow()
+        order.completion_time = datetime.now(UTC)
     
     db.session.commit()
     return jsonify({"success": True, "message": f"Order status updated to {new_status}"}), 200#wei
@@ -1403,7 +1407,7 @@ def create_review():
             dish_rating=dish_rating,
             delivery_rating=delivery_rating,
             comment=comment,
-            created_at=datetime.utcnow()
+            created_at=datetime.now(UTC)
         )
         db.session.add(review)
         db.session.commit()

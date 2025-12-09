@@ -114,10 +114,10 @@ export function DeliveryDashboard() {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'Ready for Delivery': return <Badge className="bg-blue-500">Ready</Badge>;
-      case 'In Transit': return <Badge className="bg-orange-500">On The Way</Badge>;
-      case 'Delivered': return <Badge className="bg-green-500">Delivered</Badge>;
-      default: return <Badge variant="secondary">{status}</Badge>;
+      case 'Ready for Delivery': return <Badge className="bg-blue-500 text-white">Ready</Badge>;
+      case 'In Transit': return <Badge className="bg-orange-500 text-white">On The Way</Badge>;
+      case 'Delivered': return <Badge className="bg-green-500 text-white">Delivered</Badge>;
+      default: return <Badge variant="secondary" className="text-white">{status}</Badge>;
     }
   };
 
@@ -260,7 +260,7 @@ export function DeliveryDashboard() {
                         <TableCell className="text-white">${bid.bid_amount.toFixed(2)}</TableCell>
                         <TableCell className="text-white">{new Date(bid.bid_time).toLocaleString()}</TableCell>
                         <TableCell>
-                          {bid.is_winning_bid ? <Badge className="bg-green-500">Won</Badge> : <Badge variant="secondary">Pending</Badge>}
+                          {bid.is_winning_bid ? <Badge className="bg-green-500 text-white">Won</Badge> : <Badge variant="secondary" className="text-white">Pending</Badge>}
                         </TableCell>
                       </TableRow>
                     ))}

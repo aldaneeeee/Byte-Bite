@@ -1,4 +1,4 @@
-const API_BASE_URL = "http://localhost:5000/api";
+const API_BASE_URL = "";
 
 // Types
 export interface RegisterPayload {
@@ -74,7 +74,7 @@ export const isAuthenticated = (): boolean => {
 
 // Core fetch function
 async function fetchAPI(endpoint: string, options: RequestInit = {}): Promise<any> {
-    const url = `${API_BASE_URL}/${endpoint.replace(/^\//, "")}`;
+    const url = `${API_BASE_URL}/api/${endpoint.replace(/^\//, "")}`;
 
     // Use Headers to safely set fields, wei
     const headers = new Headers(options.headers as HeadersInit);

@@ -306,7 +306,10 @@ export function ProfilePage() {
                   {order.status === 'Delivered' && !order.has_review && (
                     <Button 
                       size="sm" 
-                      onClick={() => setShowReviewModal(order.order_id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowReviewModal(order.order_id);
+                      }}
                       className="bg-[#00ff88] text-[#0a1628] hover:bg-[#00dd77]"
                     >
                       Rate

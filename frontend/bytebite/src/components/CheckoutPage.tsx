@@ -89,10 +89,6 @@ export function CheckoutPage() {
             localStorage.setItem('user', JSON.stringify(profileResponse.user));
           }
         } catch {}
-        // Redirect to home page after 3 seconds
-        setTimeout(() => {
-          navigate('/');
-        }, 3000);
       } else {
         alert(response.message || 'Failed to place order');
       }
@@ -113,7 +109,7 @@ export function CheckoutPage() {
           </div>
           <h2 className="mb-4 text-white">Order Placed Successfully!</h2>
           <p className="text-white/70 mb-4">
-            Thank you for your order. You will be redirected to the home page shortly.
+            Thank you for your order. Your food will be prepared and delivered soon.
           </p>
         </Card>
       </div>

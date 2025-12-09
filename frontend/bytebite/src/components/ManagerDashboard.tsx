@@ -123,9 +123,9 @@ export function ManagerDashboard() {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'Active': return <Badge className="bg-green-500">Active</Badge>;
-      case 'Fired': return <Badge className="bg-red-500">Fired</Badge>;
-      default: return <Badge variant="secondary">{status}</Badge>;
+      case 'Active': return <Badge className="bg-green-500 text-white">Active</Badge>;
+      case 'Fired': return <Badge className="bg-red-500 text-white">Fired</Badge>;
+      default: return <Badge variant="secondary" className="text-white">{status}</Badge>;
     }
   };
 
@@ -215,14 +215,14 @@ export function ManagerDashboard() {
                                 <Button
                                   size="sm"
                                   onClick={() => handleEmployeeAction(employee.id, 'promote')}
-                                  className="bg-green-600 hover:bg-green-700"
+                                  className="bg-green-600 hover:bg-green-700 text-white"
                                 >
                                   Promote
                                 </Button>
                                 <Button
                                   size="sm"
                                   onClick={() => handleEmployeeAction(employee.id, 'fire')}
-                                  className="bg-red-600 hover:bg-red-700"
+                                  className="bg-red-600 hover:bg-red-700 text-white"
                                 >
                                   Fire
                                 </Button>
@@ -231,7 +231,7 @@ export function ManagerDashboard() {
                               <Button
                                 size="sm"
                                 onClick={() => handleEmployeeAction(employee.id, 'activate')}
-                                className="bg-blue-600 hover:bg-blue-700"
+                                className="bg-blue-600 hover:bg-blue-700 text-white"
                               >
                                 Reactivate
                               </Button>
@@ -272,9 +272,9 @@ export function ManagerDashboard() {
                         <TableCell className="text-white">{customer.warning_count}</TableCell>
                         <TableCell>
                           <div className="flex gap-2">
-                            {customer.is_vip && <Badge className="bg-yellow-500"><Crown className="w-3 h-3 mr-1" />VIP</Badge>}
-                            {customer.is_blacklisted && <Badge className="bg-red-500">Blacklisted</Badge>}
-                            {!customer.is_blacklisted && !customer.is_vip && <Badge variant="secondary">Regular</Badge>}
+                            {customer.is_vip && <Badge className="bg-yellow-500 text-white"><Crown className="w-3 h-3 mr-1" />VIP</Badge>}
+                            {customer.is_blacklisted && <Badge className="bg-red-500 text-white">Blacklisted</Badge>}
+                            {!customer.is_blacklisted && !customer.is_vip && <Badge variant="secondary" className="text-white">Regular</Badge>}
                           </div>
                         </TableCell>
                       </TableRow>

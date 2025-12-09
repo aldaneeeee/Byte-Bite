@@ -258,14 +258,14 @@ export function ChefDashboard() {
 
           {/* 👇👇👇 Kitchen View Content (wei) 👇👇👇 */}
           <TabsContent value="kitchen">
-            <div className="grid md:grid-cols-2 gap-6">
-                <div className="col-span-2 flex justify-between items-center mb-4">
-                    <h2 className="text-xl font-semibold">Active Orders</h2>
-                    <Button onClick={loadOrders} size="sm" variant="outline" className="border-[#00ff88]/30 text-white">
-                        Refresh Orders
-                    </Button>
-                </div>
+            <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-semibold">Active Orders</h2>
+                <Button onClick={loadOrders} size="sm" variant="outline" className="border-[#00ff88]/30 text-white">
+                    Refresh Orders
+                </Button>
+            </div>
 
+            <div className="grid md:grid-cols-2 gap-6">
                 {activeOrders.length === 0 && (
                 <Card className="bg-[#0f1f3a] border-[#00ff88]/20 col-span-2 p-12 text-center">
                     <Utensils className="w-12 h-12 text-[#00ff88]/20 mx-auto mb-4" />
@@ -284,7 +284,7 @@ export function ChefDashboard() {
                         {new Date(order.order_time).toLocaleString()}
                         </div>
                     </div>
-                    <Badge className={`text-base px-3 py-1 ${order.status === 'Cooking' ? 'bg-orange-500 hover:bg-orange-600' : 'bg-blue-500 hover:bg-blue-600'}`}>
+                    <Badge className={`text-base px-3 py-1 text-white ${order.status === 'Cooking' ? 'bg-orange-500 hover:bg-orange-600' : 'bg-blue-500 hover:bg-blue-600'}`}>
                         {order.status}
                     </Badge>
                     </div>
@@ -349,21 +349,21 @@ export function ChefDashboard() {
                         <TableCell className="text-white">{dish.name}</TableCell>
                         <TableCell className="text-white">${dish.price.toFixed(2)}</TableCell>
                         <TableCell>
-                          {dish.is_vip && <Badge className="bg-yellow-500">VIP</Badge>}
+                          {dish.is_vip && <Badge className="bg-yellow-500 text-white">VIP</Badge>}
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-2">
                             <Button
                               size="sm"
                               onClick={() => handleEditDish(dish)}
-                              className="bg-blue-600 hover:bg-blue-700"
+                              className="bg-blue-600 hover:bg-blue-700 text-white"
                             >
                               <Edit className="w-4 h-4" />
                             </Button>
                             <Button
                               size="sm"
                               onClick={() => handleDeleteDish(dish.dish_id)}
-                              className="bg-red-600 hover:bg-red-700"
+                              className="bg-red-600 hover:bg-red-700 text-white"
                             >
                               <Trash2 className="w-4 h-4" />
                             </Button>
