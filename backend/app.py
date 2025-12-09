@@ -143,6 +143,7 @@ class Reviews(db.Model):
     chef_id = db.Column(db.Integer, db.ForeignKey('Employees.employee_id'))
     delivery_person_id = db.Column(db.Integer, db.ForeignKey('Employees.employee_id'))
     chef_rating = db.Column(db.Integer)
+    delivery_rating = db.Column(db.Integer)
     dish_rating = db.Column(db.Integer)
     comment = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -1195,16 +1196,16 @@ def update_delivery_status():
     db.session.commit()
     return jsonify({"success": True, "message": f"Order status updated to {new_status}"}), 200#wei
     
-# app.py (添加以下代码)  wei
+# wei
 
-# 1. 提交评价
+# 1. Submit a review
 @app.route('/api/reviews', methods=['POST'])
 def create_review():
     auth_header = request.headers.get('Authorization')
     if not auth_header:
         return jsonify({"success": False, "message": "Unauthorized"}), 401
     
-    # 解析 Token 获取用户 ID
+    # Parse the token to obtain the user ID.
     try:
         token = auth_header.split(' ')[1]
         payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
@@ -1216,18 +1217,19 @@ def create_review():
     order_id = data.get('order_id')
     chef_rating = data.get('chef_rating')
     dish_rating = data.get('dish_rating')
+    delivery_rating = data.get('delivery_rating')
     comment = data.get('comment')
 
-    # 简单的验证
-    if not all([order_id, chef_rating, dish_rating]):
+    # Simple verification
+    if not all([order_id, chef_rating, dish_rating, delivery_rating]):
         return jsonify({"success": False, "message": "Missing required fields"}), 400
 
-    # 检查订单是否存在且属于该用户
+    # Check if the order exists and belongs to this user.
     order = Orders.query.filter_by(order_id=order_id, customer_id=user.customer_id).first()
     if not order:
         return jsonify({"success": False, "message": "Order not found or access denied"}), 404
 
-    # 检查是否已经评价过
+    # Check if it has already been reviewed.
     if Reviews.query.filter_by(order_id=order_id).first():
         return jsonify({"success": False, "message": "Order already reviewed"}), 400
 
@@ -1235,10 +1237,11 @@ def create_review():
         review = Reviews(
             order_id=order_id,
             customer_id=user.customer_id,
-            chef_id=order.chef_id, # 假设订单关联了厨师
+            chef_id=order.chef_id, # Assume the order is associated with a chef.
             delivery_person_id=order.delivery_person_id,
             chef_rating=chef_rating,
             dish_rating=dish_rating,
+            delivery_rating=delivery_rating,
             comment=comment,
             created_at=datetime.utcnow()
         )
@@ -1249,22 +1252,22 @@ def create_review():
         db.session.rollback()
         return jsonify({"success": False, "message": "Failed to save review", "error": str(e)}), 500
 
-# 2. 获取厨师的评价 (供 ChefDashboard 使用)
+# 2. Get chef reviews (for use in ChefDashboard)
 @app.route('/api/chef/reviews', methods=['GET'])
-@require_role('Chef') # 使用你之前定义的装饰器
+@require_role('Chef') # Use the decorator you defined earlier.
 def get_chef_reviews():
-    # 获取当前厨师
+    # Get the current chef.
     auth_header = request.headers.get('Authorization')
     token = auth_header.split(' ')[1]
     payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
     chef = Employees.query.filter_by(email=payload['email']).first()
 
-    # 查询所有关联该厨师的评论
+    # Retrieve all reviews associated with this chef.
     reviews = Reviews.query.filter_by(chef_id=chef.employee_id).order_by(Reviews.created_at.desc()).all()
     
     review_list = []
     for r in reviews:
-        # 获取关联的菜品名（这里简化处理，实际可能需要通过 Order_Items 关联查询）
+        # Retrieve the associated dish names (this is a simplified approach; in reality, it might require a join query through Order_Items).
         review_list.append({
             "review_id": r.review_id,
             "dish_rating": r.dish_rating,

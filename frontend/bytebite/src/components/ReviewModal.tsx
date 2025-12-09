@@ -14,14 +14,15 @@ interface ReviewModalProps {
 export function ReviewModal({ orderId, onClose, onSuccess }: ReviewModalProps) {
   const [dishRating, setDishRating] = useState(0);
   const [chefRating, setChefRating] = useState(0);
+  const [deliveryRating, setDeliveryRating] = useState(0);
   const [comment, setComment] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (dishRating === 0 || chefRating === 0) {
-      setError('Please provide ratings for both Dish and Chef');
+    if (dishRating === 0 || chefRating === 0 || deliveryRating === 0) {
+      setError('Please rate Food, Chef, and Delivery');
       return;
     }
     
@@ -31,6 +32,7 @@ export function ReviewModal({ orderId, onClose, onSuccess }: ReviewModalProps) {
         order_id: orderId,
         chef_rating: chefRating,
         dish_rating: dishRating,
+        delivery_rating: deliveryRating,
         comment
       });
       
@@ -91,6 +93,10 @@ export function ReviewModal({ orderId, onClose, onSuccess }: ReviewModalProps) {
           <div>
             <label className="block text-white mb-2">How was the Chef?</label>
             {renderStars(chefRating, setChefRating)}
+          </div>
+          <div>
+            <label className="block text-white mb-2">How was the Delivery?</label>
+            {renderStars(deliveryRating, setDeliveryRating)}
           </div>
 
           <div>

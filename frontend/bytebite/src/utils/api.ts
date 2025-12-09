@@ -170,7 +170,7 @@ export const api = {
     createOrder: (order: OrderPayload) => fetchAPI("orders", { method: "POST", body: JSON.stringify(order) }),
     
     // Reviews //wei
-    createReview: (data: { order_id: number, chef_rating: number, dish_rating: number, comment: string }) => {
+    createReview: (data: { order_id: number, chef_rating: number, dish_rating: number, delivery_rating: number,comment: string }) => {
         return fetchAPI("reviews", {
             method: "POST",
             body: JSON.stringify(data),
