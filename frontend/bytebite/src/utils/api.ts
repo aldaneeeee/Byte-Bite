@@ -343,6 +343,34 @@ export const api = {
         return fetchAPI("manager/employees");
     },
 
+    sendChatMessage: (message: string) => {
+        return fetchAPI("chat", {
+            method: "POST",
+            body: JSON.stringify({ message }),
+        });
+    },
+
+    searchMenuByImage: (file: File) => {
+        const formData = new FormData();
+        formData.append('image', file);
+
+        // Note: fetchAPI wrapper might set 'Content-Type': 'application/json' by default
+        // For FormData, we must NOT set Content-Type header manually (browser sets it with boundary)
+        // We need to bypass the default wrapper or adjust it. 
+        // Assuming fetchAPI handles this, or we use direct fetch here for safety:
+        
+        const token = localStorage.getItem('authToken');
+        const headers: any = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        // DO NOT set Content-Type for FormData
+
+        return fetch('http://127.0.0.1:5000/api/menu/search-by-image', {
+            method: 'POST',
+            headers: headers,
+            body: formData
+        }).then(res => res.json());
+    },
+
     // Public endpoints for home page
     getRecommendations: () => fetchAPI("recommendations"),
     getFeaturedChefs: () => fetchAPI("chefs/featured"),

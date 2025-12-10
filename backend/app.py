@@ -1,5 +1,10 @@
 # app.py
+import time
+from google.api_core import exceptions as google_exceptions
 import os
+from dotenv import load_dotenv
+import google.generativeai as genai
+import PIL.Image
 import sqlite3
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, g
 from flask_cors import CORS
@@ -9,7 +14,12 @@ import jwt
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 from decimal import Decimal
+
 #import DB language 
+
+
+
+load_dotenv()#AI API
 
 def utc_now():
     """Return current UTC datetime (timezone-aware)"""
@@ -302,7 +312,46 @@ with app.app_context():
         if foie and not foie.chef_id: foie.chef_id = chef_mario.employee_id
         
         db.session.commit()
+with app.app_context():
+        if AI_Knowledge_Base.query.count() == 0:
+            print("Seeding AI Knowledge Base...")
+            manager = Employees.query.filter_by(role='Manager').first()
+            
+            kb_data = [
+                {
+                    "question": "How can I become a VIP?",
+                    "answer": "To become a VIP member, you need to place at least 5 orders with us. Once you reach 5 orders, the system will automatically upgrade your status."
+                },
+                {
+                    "question": "What are the benefits of being a VIP?",
+                    "answer": "VIP members get access to exclusive menu items (like the Truffle Wagyu Burger) and receive special discounts on select orders."
+                },
+                {
+                    "question": "What is the delivery process?",
+                    "answer": "Our delivery process works in 3 steps: 1. You place an order. 2. Our chefs prepare it. 3. Our delivery staff bid to deliver your order. Once assigned, you can track the status from 'In Transit' to 'Delivered' in your profile."
+                },
+                {
+                    "question": "Do you offer refunds?",
+                    "answer": "Refunds are handled on a case-by-case basis. Please contact the manager at manager@bytebite.com if you have issues with your order."
+                },
+                {
+                    "question": "Where are you located?",
+                    "answer": "We are located at 123 Tech Avenue, San Francisco, CA 94103."
+                }
+            ]
+            
+            for item in kb_data:
+                kb = AI_Knowledge_Base(
+                    employee_id=manager.employee_id if manager else None,
+                    question=item['question'],
+                    answer=item['answer'],
+                    created_at=datetime.now(timezone.utc)
+                )
+                db.session.add(kb)
+            db.session.commit()
+            print("AI Knowledge Base seeded!")
 
+# Routes
 @app.route("/")
 def home():
     return jsonify({"message": "Byte&Bite API Server", "status": "running"})
@@ -2185,6 +2234,188 @@ def create_comment(post_id):
     db.session.add(new_comment)
     db.session.commit()
     return jsonify({"success": True, "message": "Comment added"}), 201
+
+
+@app.route('/api/chat', methods=['POST'])
+def chat_with_ai():
+    """
+    Handle chat messages using Google Gemini with Database Context (Menu + Knowledge Base).
+    Includes robust retry logic for rate limits.
+    """
+    GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY')
+    if not GOOGLE_API_KEY:
+        return jsonify({"success": False, "message": "Server API Key missing"}), 500
+
+    data = request.get_json()
+    user_message = data.get('message', '')
+
+    if not user_message:
+        return jsonify({"success": False, "message": "Message is empty"}), 400
+
+    try:
+        # 1. Fetch Context
+        dishes = Dishes.query.all()
+        menu_context = "\n".join([f"- {d.name}: ${d.price} ({d.description})" for d in dishes])
+
+        kb_entries = AI_Knowledge_Base.query.filter_by(is_deleted=False).all()
+        kb_context_list = [f"Q: {entry.question}\nA: {entry.answer}" for entry in kb_entries]
+        kb_context_str = "\n---\n".join(kb_context_list)
+
+        # 2. Construct System Prompt
+        system_instruction = f"""
+        You are the helpful AI assistant for 'Byte & Bite', a tech-themed street food restaurant.
+        
+        Your Goal:
+        Answer user questions accurately based ONLY on the provided "Official Knowledge Base" and "Current Menu".
+        
+        Instructions:
+        1. Check the Knowledge Base for VIP, delivery, or policy questions.
+        2. Check the Menu for food questions.
+        3. If the answer is not found, ask them to contact the manager.
+        4. Keep answers concise.
+        
+        === Official Knowledge Base ===
+        {kb_context_str}
+        
+        === Current Menu ===
+        {menu_context}
+        
+        === User Query ===
+        {user_message}
+        """
+
+        # 3. Configure Gemini
+        genai.configure(api_key=GOOGLE_API_KEY)
+        model = genai.GenerativeModel('gemini-2.0-flash') 
+
+        # 4. Call API with Retry Logic (Exponential Backoff)
+        max_retries = 3
+        response_text = "I'm having trouble connecting. Please try again."
+
+        for attempt in range(max_retries):
+            try:
+                # Attempt to generate content
+                response = model.generate_content(system_instruction)
+                response_text = response.text
+                break # Success! Exit the loop
+            
+            except google_exceptions.ResourceExhausted:
+                # If quota exceeded (429 error)
+                if attempt < max_retries - 1:
+                    wait_time = 20 + (attempt * 10) # Attempt 0: 20s, Attempt 1: 30s
+                    print(f"[Gemini] Quota exceeded. Retrying in {wait_time} seconds (Attempt {attempt + 1}/{max_retries})...")
+                    time.sleep(wait_time)
+                else:
+                    print("[Gemini] Quota exceeded. Max retries reached.")
+                    return jsonify({
+                        "success": False, 
+                        "message": "System is busy (High Traffic).",
+                        "reply": "Our AI servers are currently overloaded with requests. Please wait a minute and try asking again!"
+                    }), 429
+            except Exception as e:
+                raise e # Throw other errors immediately
+
+        return jsonify({
+            "success": True, 
+            "reply": response_text
+        }), 200
+
+    except Exception as e:
+        print(f"Gemini Error: {e}")
+        return jsonify({
+            "success": False, 
+            "message": "AI is currently offline.",
+            "reply": "I'm encountering a system error. Please try again later."
+        }), 500
+@app.route('/api/menu/search-by-image', methods=['POST'])
+def search_food_by_image():
+    # 1. Validate File
+    if 'image' not in request.files:
+        return jsonify({"success": False, "message": "No image uploaded"}), 400
+    
+    file = request.files['image']
+    if file.filename == '':
+        return jsonify({"success": False, "message": "No selected file"}), 400
+
+    # Validate file type
+    allowed_extensions = {'png', 'jpg', 'jpeg', 'webp'}
+    if '.' not in file.filename or file.filename.rsplit('.', 1)[1].lower() not in allowed_extensions:
+        return jsonify({"success": False, "message": "Invalid file type. Allowed: png, jpg, jpeg, webp"}), 400
+
+    # 2. Call Gemini Vision API
+    try:
+        GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY')
+        if not GOOGLE_API_KEY:
+            return jsonify({"success": False, "message": "Server API Key missing"}), 500
+
+        img = PIL.Image.open(file)
+        
+        # Configure Gemini
+        genai.configure(api_key=GOOGLE_API_KEY)
+        model = genai.GenerativeModel('gemini-2.0-flash') # Use Flash for speed
+
+        prompt = """
+        Analyze this image. 
+        1. Is it a picture of food? If not, respond EXACTLY: "ERROR: NOT_FOOD".
+        2. Are there multiple distinct dishes that are too confusing? If yes, respond EXACTLY: "ERROR: MULTIPLE".
+        3. If it is a single food item, return ONLY the generic name of the dish (e.g., "Burger", "Ramen", "Tacos"). 
+           Do not add punctuation or extra words.
+        """
+
+        response = model.generate_content([prompt, img])
+        result_text = response.text.strip()
+
+        # 3. Handle Exceptions from AI
+        if "ERROR: NOT_FOOD" in result_text:
+            return jsonify({"success": False, "message": "Food not recognized in the image."}), 404
+        
+        if "ERROR: MULTIPLE" in result_text:
+            return jsonify({"success": False, "message": "Multiple foods detected. Please upload a photo of a single dish."}), 400
+
+        # 4. Search Database for matches
+        # We search for dishes where the name contains the identified keyword (Case insensitive)
+        search_term = f"%{result_text}%"
+        matched_dishes = Dishes.query.filter(Dishes.name.ilike(search_term)).all()
+
+        if not matched_dishes:
+            # Fallback: Try searching description if name fails
+            matched_dishes = Dishes.query.filter(Dishes.description.ilike(search_term)).all()
+
+        if not matched_dishes:
+            return jsonify({
+                "success": False, 
+                "message": f"Looks like {result_text}, but we don't have an exact match on our menu.",
+                "identified_name": result_text
+            }), 404
+
+        # 5. Return Results
+        results = []
+        for dish in matched_dishes:
+            # Get Chef Name
+            chef_name = "Unknown"
+            if dish.chef_id:
+                chef = Employees.query.get(dish.chef_id)
+                if chef: chef_name = chef.name
+
+            results.append({
+                'id': str(dish.dish_id),
+                'name': dish.name,
+                'price': float(dish.price),
+                'description': dish.description,
+                'image': dish.image_url,
+                'is_vip': dish.is_vip,
+                'chef_name': chef_name
+            })
+
+        return jsonify({
+            "success": True, 
+            "identified_as": result_text,
+            "dishes": results
+        }), 200
+
+    except Exception as e:
+        print(f"Image Search Error: {e}")
+        return jsonify({"success": False, "message": "Failed to process image", "error": str(e)}), 500   
 
 if __name__ == "__main__":
     app.run(debug=True)

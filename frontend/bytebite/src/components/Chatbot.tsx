@@ -3,6 +3,7 @@ import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { Input } from './ui/input';
 import { MessageCircle, X, Send, Bot, User } from 'lucide-react';
+import { api } from '../utils/api'; // Import API utility
 
 // Interface for chat messages
 interface Message {
@@ -42,95 +43,46 @@ export function Chatbot() {
     e.preventDefault();
     if (!inputMessage.trim() || isLoading) return;
 
-    // Add user message to chat
+    // Add user message to chat UI immediately
     const userMessage: Message = {
       id: Date.now().toString(),
       sender: 'user',
       content: inputMessage,
       timestamp: new Date(),
     };
-    setMessages([...messages, userMessage]);
+    setMessages((prev) => [...prev, userMessage]);
     setInputMessage('');
     setIsLoading(true);
 
-    // Simulate bot response delay (replace with actual API call)
-    // TODO: Replace with real AI API call: api.sendChatMessage(inputMessage)
-    setTimeout(() => {
-      const botResponse = getBotResponse(inputMessage);
+    try {
+      // Call the real Backend API
+      const response = await api.sendChatMessage(userMessage.content);
+      
+      const botContent = response.success 
+        ? response.reply 
+        : "Sorry, I'm having trouble connecting to the mainframe. Please try again later.";
+
       const botMessage: Message = {
         id: (Date.now() + 1).toString(),
         sender: 'bot',
-        content: botResponse,
+        content: botContent,
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, botMessage]);
+
+    } catch (error) {
+      console.error("Chat error:", error);
+      // Add error message to UI
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        sender: 'bot',
+        content: "Network error. Please check your connection.",
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+    } finally {
       setIsLoading(false);
-    }, 1000);
-  };
-
-  // Mock bot response logic (replace with actual AI integration)
-  const getBotResponse = (userInput: string): string => {
-    const input = userInput.toLowerCase();
-
-    // Menu questions
-    if (input.includes('menu') || input.includes('food') || input.includes('dish')) {
-      return 'We have an amazing menu of tech-themed street food! Popular items include the Code Burger, Async Ramen, Debug Tacos, and Binary Pizza. You can view our full menu by clicking the "Menu" link in the navigation bar. Is there a specific type of food you\'re interested in?';
     }
-
-    // Delivery questions
-    if (input.includes('deliver') || input.includes('shipping') || input.includes('time')) {
-      return 'We typically deliver within 30-45 minutes depending on your location. We cover most areas within a 10-mile radius. You can check if we deliver to your area by going to checkout and entering your address!';
-    }
-
-    // Hours questions
-    if (input.includes('hour') || input.includes('open') || input.includes('close')) {
-      return 'We\'re open Monday-Saturday from 11:00 AM to 10:00 PM, and Sunday from 12:00 PM to 9:00 PM. Online ordering is available during these hours!';
-    }
-
-    // Price questions
-    if (input.includes('price') || input.includes('cost') || input.includes('expensive')) {
-      return 'Our menu items range from $8 to $18. We also offer combo deals and daily specials! Check out the menu page to see current prices and any ongoing promotions.';
-    }
-
-    // Account questions
-    if (input.includes('account') || input.includes('login') || input.includes('sign up')) {
-      return 'You can create an account or login by clicking the user icon in the top right corner. Having an account lets you save your favorite orders, track deliveries, and join our community forum!';
-    }
-
-    // Payment questions
-    if (input.includes('payment') || input.includes('pay') || input.includes('credit card')) {
-      return 'We accept all major credit cards, debit cards, and digital payment methods like Apple Pay and Google Pay. Payment is processed securely at checkout.';
-    }
-
-    // Vegan/dietary questions
-    if (input.includes('vegan') || input.includes('vegetarian') || input.includes('gluten') || input.includes('allerg')) {
-      return 'We offer several vegetarian options and are working on expanding our vegan menu. If you have specific dietary restrictions or allergies, please mention them in the special instructions at checkout, and our kitchen will do their best to accommodate!';
-    }
-
-    // Forum questions
-    if (input.includes('forum') || input.includes('community') || input.includes('discuss')) {
-      return 'We have an active community forum where users can share reviews, ask questions, and make suggestions! You need to be logged in to access the forum. Just create a free account to join the conversation!';
-    }
-
-    // Specials/deals questions
-    if (input.includes('special') || input.includes('deal') || input.includes('discount') || input.includes('promo')) {
-      return 'We run special promotions regularly! Check our home page for current deals, and make sure to create an account to receive exclusive offers and updates about new menu items.';
-    }
-
-    // Greetings
-    if (input.includes('hello') || input.includes('hi') || input.includes('hey')) {
-      return 'Hello! How can I help you today? Feel free to ask me about our menu, delivery, hours, or anything else!';
-    }
-
-    // Thanks
-    if (input.includes('thank') || input.includes('thanks')) {
-      return 'You\'re welcome! Is there anything else I can help you with?';
-    }
-
-    // Default response
-    return 'I\'m here to help! You can ask me about our menu items, delivery times, hours of operation, payment methods, dietary options, or how to create an account. What would you like to know?';
-    //*/
-    // Working on api call integration tomorrow
   };
 
   return (
@@ -156,7 +108,7 @@ export function Chatbot() {
               </div>
               <div>
                 <h3 className="text-white">Byte&Bite Assistant</h3>
-                <p className="text-white/50 text-xs">Always here to help</p>
+                <p className="text-white/50 text-xs">Powered by Gemini AI</p>
               </div>
             </div>
             <Button
@@ -201,7 +153,7 @@ export function Chatbot() {
                       : 'bg-[#00ff88] text-[#0a1628]'
                   }`}
                 >
-                  <p className="text-sm">{message.content}</p>
+                  <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                   <p
                     className={`text-xs mt-1 ${
                       message.sender === 'bot'
@@ -243,7 +195,7 @@ export function Chatbot() {
               <Input
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
-                placeholder="Type your message..."
+                placeholder="Ask about our menu..."
                 className="bg-[#1a2f4a] border-[#00ff88]/20 text-white placeholder:text-white/40"
                 disabled={isLoading}
               />
@@ -257,7 +209,7 @@ export function Chatbot() {
               </Button>
             </form>
             <p className="text-white/50 text-xs mt-2 text-center">
-              Powered by AI • Available 24/7
+              AI can make mistakes. Please check info with staff.
             </p>
           </div>
         </Card>

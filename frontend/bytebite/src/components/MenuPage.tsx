@@ -3,9 +3,10 @@ import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';
 import { useCart, MenuItem } from './CartContext';
-import { ShoppingCart, Check } from 'lucide-react';
+import { ShoppingCart, Check, Camera } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import { api } from '../utils/api';
+import { ImageSearchModal } from './ImageSearchModal';
 
 // Menu Page component
 export function MenuPage() {
@@ -17,6 +18,8 @@ export function MenuPage() {
   const [addedItems, setAddedItems] = useState<Set<string>>(new Set());
   // Track currently selected category filter
   const [selectedCategory, setSelectedCategory] = useState('All');
+  // State for Image Search Modal
+  const [isImageSearchOpen, setIsImageSearchOpen] = useState(false);
 
   // Available filter categories
   const categories = ['All', 'Street Bites', 'Main Bowls', 'Snacks'];
@@ -68,6 +71,14 @@ export function MenuPage() {
     return true;
   });
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#0a1628] flex items-center justify-center">
+        <div className="text-white">Loading menu...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       {/* Header */}
@@ -78,18 +89,28 @@ export function MenuPage() {
         </p>
       </div>
 
-      {/* Category Filter Buttons */}
-      <div className="flex gap-2 mb-8 justify-center flex-wrap">
-        {categories.map((category) => (
-          <Button
-            key={category}
-            variant={selectedCategory === category ? 'default' : 'outline'}
-            onClick={() => setSelectedCategory(category)}
-            className={selectedCategory === category ? 'bg-[#00ff88] hover:bg-[#00dd77] text-[#0a1628]' : 'border-[#00ff88]/30 text-white/80 hover:bg-[#00ff88]/10 hover:text-[#00ff88]'}
-          >
-            {category}
-          </Button>
-        ))}
+      {/* Category Filter & AI Search Buttons */}
+      <div className="flex flex-col sm:flex-row justify-center items-center gap-4 mb-8">
+        <div className="flex gap-2 flex-wrap justify-center">
+          {categories.map((category) => (
+            <Button
+              key={category}
+              variant={selectedCategory === category ? 'default' : 'outline'}
+              onClick={() => setSelectedCategory(category)}
+              className={selectedCategory === category ? 'bg-[#00ff88] hover:bg-[#00dd77] text-[#0a1628]' : 'border-[#00ff88]/30 text-white/80 hover:bg-[#00ff88]/10 hover:text-[#00ff88]'}
+            >
+              {category}
+            </Button>
+          ))}
+        </div>
+        
+        {/* AI Image Search Button */}
+        <Button 
+            onClick={() => setIsImageSearchOpen(true)}
+            className="bg-purple-600 hover:bg-purple-700 text-white whitespace-nowrap shadow-lg hover:shadow-purple-500/20"
+        >
+            <Camera className="w-4 h-4 mr-2" /> AI Food Search
+        </Button>
       </div>
 
       {/* Menu Grid - displays filtered items */}
@@ -162,6 +183,12 @@ export function MenuPage() {
           </Card>
         ))}
       </div>
+
+      {/* Image Search Modal */}
+      <ImageSearchModal 
+        isOpen={isImageSearchOpen} 
+        onClose={() => setIsImageSearchOpen(false)} 
+      />
     </div>
   );
 }
