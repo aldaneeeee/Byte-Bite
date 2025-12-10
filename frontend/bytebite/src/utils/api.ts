@@ -370,6 +370,27 @@ export const api = {
             body: formData
         }).then(res => res.json());
     },
+    rateChatMessage: (question: string, answer: string, rating: number) => {
+        return fetchAPI("chat/rate", {
+            method: "POST",
+            body: JSON.stringify({ question, answer, rating }),
+        });
+    },
+
+    getKnowledgeBase: () => {
+        return fetchAPI("manager/kb", {
+            method: "GET",
+        });
+    },
+
+    addKnowledgeEntry: (question: string, answer: string) => {
+        return fetchAPI("manager/kb", {
+            method: "POST",
+            body: JSON.stringify({ question, answer }),
+        });
+    },
+
+
 
     // Public endpoints for home page
     getRecommendations: () => fetchAPI("recommendations"),

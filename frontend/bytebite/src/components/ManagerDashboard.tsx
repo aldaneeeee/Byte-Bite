@@ -3,6 +3,7 @@ import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
+import { Textarea } from './ui/textarea'; // 新增引用
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Badge } from './ui/badge';
@@ -10,7 +11,11 @@ import { Alert, AlertDescription } from './ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../utils/api';
-import { Users, ChefHat, Truck, Crown, Edit, Trash2, Plus, X, Search, DollarSign, Clock, Gavel, FileText, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
+import { 
+  Users, ChefHat, Truck, Crown, Edit, Trash2, Plus, X, Search, 
+  DollarSign, Clock, Gavel, FileText, ArrowUpRight, ArrowDownLeft,
+  Brain, Star, MessageSquare // 新增图标
+} from 'lucide-react';
 
 // Interfaces
 interface Employee {
@@ -62,12 +67,29 @@ interface FinancialLog {
     created_at: string;
 }
 
+// 👇👇👇 新增 KB 接口 👇👇👇
+interface KBEntry {
+  id: number;
+  question: string;
+  answer: string;
+  author: string;
+  avg_rating: number;
+  rating_count: number;
+  created_at: string;
+}
+
 export function ManagerDashboard() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [biddings, setBiddings] = useState<BiddingSession[]>([]);
   const [financialLogs, setFinancialLogs] = useState<FinancialLog[]>([]);
   const [deliveryStaff, setDeliveryStaff] = useState<Employee[]>([]);
+  
+  // 👇👇👇 新增 KB State 👇👇👇
+  const [kbEntries, setKbEntries] = useState<KBEntry[]>([]);
+  const [newQuestion, setNewQuestion] = useState('');
+  const [newAnswer, setNewAnswer] = useState('');
+  const [loadingKB, setLoadingKB] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -112,11 +134,13 @@ export function ManagerDashboard() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [employeesRes, customersRes, biddingsRes, financialsRes] = await Promise.all([
+      // 👇👇👇 增加 getKnowledgeBase 调用 👇👇👇
+      const [employeesRes, customersRes, biddingsRes, financialsRes, kbRes] = await Promise.all([
         api.getEmployees(),
         api.getAllCustomers(),
         api.getManagerBiddings(),
-        api.getFinancialLogs()
+        api.getFinancialLogs(),
+        api.getKnowledgeBase() // 获取 AI 知识库
       ]);
 
       if (employeesRes.success) {
@@ -126,6 +150,7 @@ export function ManagerDashboard() {
       if (customersRes.success) setCustomers(customersRes.customers);
       if (biddingsRes.success) setBiddings(biddingsRes.biddings);
       if (financialsRes.success) setFinancialLogs(financialsRes.logs);
+      if (kbRes.success) setKbEntries(kbRes.entries); // 设置 KB 数据
       
     } catch (err) {
       setError('Failed to load data');
@@ -134,7 +159,32 @@ export function ManagerDashboard() {
     }
   };
 
-  // --- Handlers ---
+  // 👇👇👇 新增: 添加 Knowledge 处理函数 👇👇👇
+  const handleAddKB = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newQuestion.trim() || !newAnswer.trim()) return;
+
+    setLoadingKB(true);
+    try {
+      const res = await api.addKnowledgeEntry(newQuestion, newAnswer);
+      if (res.success) {
+        setSuccess("Knowledge added successfully!");
+        setNewQuestion('');
+        setNewAnswer('');
+        // 单独刷新 KB 列表
+        const kbRes = await api.getKnowledgeBase();
+        if(kbRes.success) setKbEntries(kbRes.entries);
+      } else {
+        setError("Failed to add entry");
+      }
+    } catch (e) {
+      setError("Error connecting to server");
+    } finally {
+      setLoadingKB(false);
+    }
+  };
+
+  // --- Existing Handlers ---
   const openCreateEmployee = () => { setIsEditing(false); setEmpForm({ id: 0, name: '', email: '', password: '', role: 'Chef' }); setShowEmployeeModal(true); };
   const openEditEmployee = (emp: Employee) => { setIsEditing(true); setEmpForm({ id: emp.id, name: emp.name, email: emp.email, password: '', role: emp.role }); setShowEmployeeModal(true); };
   
@@ -285,7 +335,7 @@ export function ManagerDashboard() {
         {success && <Alert className="mb-6 border-green-500/50 bg-green-500/10"><AlertDescription className="text-green-400">{success}</AlertDescription></Alert>}
 
         <Tabs defaultValue="financials" className="space-y-6">
-          <TabsList className="bg-[#0f1f3a] border border-[#00ff88]/20 w-full justify-start">
+          <TabsList className="bg-[#0f1f3a] border border-[#00ff88]/20 w-full justify-start h-auto flex-wrap gap-2 p-2">
             <TabsTrigger value="financials" className="flex-1 data-[state=active]:bg-[#00ff88] data-[state=active]:text-[#0a1628]">
                <FileText className="w-4 h-4 mr-2"/> Financial Audit
             </TabsTrigger>
@@ -297,6 +347,10 @@ export function ManagerDashboard() {
             </TabsTrigger>
             <TabsTrigger value="customers" className="flex-1 data-[state=active]:bg-[#00ff88] data-[state=active]:text-[#0a1628]">
                Customer Accounts
+            </TabsTrigger>
+            {/* 👇👇👇 新增 Tab: AI Brain 👇👇👇 */}
+            <TabsTrigger value="ai-brain" className="flex-1 data-[state=active]:bg-[#00ff88] data-[state=active]:text-[#0a1628]">
+               <Brain className="w-4 h-4 mr-2"/> AI Knowledge Base
             </TabsTrigger>
           </TabsList>
 
@@ -500,6 +554,102 @@ export function ManagerDashboard() {
                     ))}</TableBody>
                 </Table>
             </Card>
+          </TabsContent>
+
+          {/* 👇👇👇 Tab: AI Knowledge Base (新增内容) 👇👇👇 */}
+          <TabsContent value="ai-brain">
+            <div className="grid lg:grid-cols-3 gap-8">
+                {/* Left: Add Form */}
+                <div className="lg:col-span-1">
+                    <Card className="bg-[#0f1f3a] border border-[#00ff88]/20 p-6 sticky top-6">
+                        <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                            <Plus className="w-5 h-5 text-[#00ff88]" /> Add Knowledge
+                        </h2>
+                        <p className="text-white/50 text-sm mb-6">
+                            Teach the AI new facts to improve customer service.
+                        </p>
+                        <form onSubmit={handleAddKB} className="space-y-4">
+                            <div>
+                                <Label className="text-white mb-2 block">Question / Trigger</Label>
+                                <Input 
+                                    placeholder="e.g., Do you sell gift cards?" 
+                                    value={newQuestion}
+                                    onChange={e => setNewQuestion(e.target.value)}
+                                    className="bg-[#1a2f4a] border-white/10 text-white"
+                                />
+                            </div>
+                            <div>
+                                <Label className="text-white mb-2 block">Standard Answer</Label>
+                                <Textarea 
+                                    placeholder="e.g., Yes, physical gift cards are available at the counter." 
+                                    value={newAnswer}
+                                    onChange={e => setNewAnswer(e.target.value)}
+                                    className="bg-[#1a2f4a] border-white/10 text-white min-h-[120px]"
+                                />
+                            </div>
+                            <Button 
+                                type="submit" 
+                                disabled={loadingKB}
+                                className="w-full bg-[#00ff88] text-[#0a1628] hover:bg-[#00dd77] font-bold"
+                            >
+                                {loadingKB ? "Saving..." : "Add to Knowledge Base"}
+                            </Button>
+                        </form>
+                    </Card>
+                </div>
+
+                {/* Right: Knowledge List */}
+                <div className="lg:col-span-2 space-y-4">
+                    <div className="flex justify-between items-center mb-2">
+                        <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                            <Brain className="w-5 h-5 text-[#00ff88]" /> Existing Knowledge
+                        </h2>
+                        <span className="text-white/40 text-sm">{kbEntries.length} entries found</span>
+                    </div>
+
+                    {kbEntries.map((entry) => (
+                        <Card key={entry.id} className="bg-[#0f1f3a] border border-[#00ff88]/10 hover:border-[#00ff88]/30 transition-all p-5">
+                            <div className="flex justify-between items-start gap-4">
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <MessageSquare className="w-4 h-4 text-[#00ff88]" />
+                                        <h3 className="text-white font-semibold text-lg">{entry.question}</h3>
+                                    </div>
+                                    <p className="text-white/70 bg-[#1a2f4a] p-3 rounded-lg border border-white/5">
+                                        {entry.answer}
+                                    </p>
+                                    
+                                    <div className="flex items-center gap-4 mt-3 text-xs text-white/40">
+                                        <span>Added by: <span className="text-white/60">{entry.author}</span></span>
+                                        <span>•</span>
+                                        <span>{entry.created_at}</span>
+                                    </div>
+                                </div>
+
+                                {/* Rating Badge */}
+                                <div className="flex flex-col items-end shrink-0">
+                                    <div className={`flex items-center gap-1 px-3 py-1 rounded-full border ${
+                                        entry.avg_rating >= 4.0 ? 'bg-green-500/10 border-green-500/30 text-green-400' :
+                                        entry.avg_rating >= 3.0 ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400' :
+                                        'bg-red-500/10 border-red-500/30 text-red-400'
+                                    }`}>
+                                        <Star className="w-3 h-3 fill-current" />
+                                        <span className="font-bold">{entry.avg_rating.toFixed(1)}</span>
+                                    </div>
+                                    <span className="text-white/30 text-xs mt-1">{entry.rating_count} ratings</span>
+                                </div>
+                            </div>
+                        </Card>
+                    ))}
+
+                    {kbEntries.length === 0 && (
+                        <div className="text-center py-12 border-2 border-dashed border-white/5 rounded-xl">
+                            <Brain className="w-12 h-12 text-white/10 mx-auto mb-3" />
+                            <p className="text-white/30">No knowledge entries yet.</p>
+                        </div>
+                    )}
+                </div>
+            </div>
           </TabsContent>
 
         </Tabs>

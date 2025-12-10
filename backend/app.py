@@ -2416,6 +2416,169 @@ def search_food_by_image():
     except Exception as e:
         print(f"Image Search Error: {e}")
         return jsonify({"success": False, "message": "Failed to process image", "error": str(e)}), 500   
+@app.route('/api/chat/rate', methods=['POST'])
+def rate_ai_answer():
+    auth_header = request.headers.get('Authorization')
+    customer_id = None
+    
+    # 1. Get Customer ID (if logged in)
+    if auth_header:
+        try:
+            token = auth_header.split(' ')[1]
+            payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+            user = Customers.query.filter_by(email=payload.get('email')).first()
+            if user: customer_id = user.customer_id
+        except: pass
+
+    # If guest, use a placeholder or handle error (DB requires customer_id? Check model)
+    # Your model says: customer_id nullable=False. So guests cannot rate? 
+    # For now, if no user, we return 401.
+    if not customer_id:
+        return jsonify({"success": False, "message": "Please login to rate answers."}), 401
+
+    data = request.get_json()
+    question = data.get('question')
+    answer = data.get('answer')
+    rating = data.get('rating') # 0-5
+
+    if rating is None or not question or not answer:
+        return jsonify({"success": False, "message": "Missing fields"}), 400
+
+    try:
+        # 2. Check if this Q&A pair already exists in KB
+        # We search by question content (exact or similar)
+        kb_entry = AI_Knowledge_Base.query.filter(AI_Knowledge_Base.question.like(f"%{question}%")).first()
+
+        # 3. Handle Logic based on Rating
+        
+        # Scenario: Rating 5 (Add to KB if new)
+        if rating == 5:
+            if not kb_entry:
+                # Add to local KB
+                print("[AI Rating] High rating! Adding to Knowledge Base.")
+                kb_entry = AI_Knowledge_Base(
+                    question=question,
+                    answer=answer,
+                    created_at=datetime.now(timezone.utc),
+                    is_deleted=False
+                )
+                db.session.add(kb_entry)
+                db.session.flush() # Generate ID
+            else:
+                # If verified, ensure it's not deleted
+                kb_entry.is_deleted = False
+
+        # Scenario: Rating 0 (Flag/Remove from KB)
+        elif rating == 0:
+            print("[AI Rating] Zero rating. Flagging content.")
+            if kb_entry:
+                # Soft delete from KB
+                kb_entry.is_deleted = True
+                # Optional: You could add logic here to flag the 'author' if needed
+            else:
+                # If it's not in KB, we don't need to delete anything.
+                # But we can't save the rating to DB because kb_id is required.
+                return jsonify({"success": True, "message": "Feedback received (Low rating logged)."}), 200
+
+        # 4. Save Rating Record
+        # We can only save to AI_Ratings if we have a valid kb_id
+        if kb_entry:
+            new_rating = AI_Ratings(
+                kb_id=kb_entry.kb_id,
+                customer_id=customer_id,
+                rating=rating,
+                helpful_score=rating, # Using rating as helpful score for now
+                created_at=datetime.now(timezone.utc)
+            )
+            db.session.add(new_rating)
+            db.session.commit()
+            return jsonify({"success": True, "message": "Rating saved and KB updated."}), 200
+        else:
+            # If we are here, it means Rating is 1-4 AND it wasn't in KB.
+            # We cannot save to DB due to constraints, but we acknowledge the user.
+            return jsonify({"success": True, "message": "Rating received."}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"Rating Error: {e}")
+        return jsonify({"success": False, "message": "Failed to save rating"}), 500
+@app.route('/api/manager/kb', methods=['GET'])
+def get_kb_entries():
+    # Verify Manager Role
+    auth_header = request.headers.get('Authorization')
+    if not auth_header: return jsonify({"success": False}), 401
+    try:
+        token = auth_header.split(' ')[1]
+        payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+        if payload.get('role') != 'Manager': return jsonify({"success": False}), 403
+    except: return jsonify({"success": False}), 401
+
+    # Query: Join KB with Ratings to calculate average
+    # We use outerjoin because some entries might not have ratings yet
+    results = db.session.query(
+        AI_Knowledge_Base,
+        db.func.avg(AI_Ratings.rating).label('avg_rating'),
+        db.func.count(AI_Ratings.rating_id).label('rating_count')
+    ).outerjoin(AI_Ratings, AI_Knowledge_Base.kb_id == AI_Ratings.kb_id)\
+     .filter(AI_Knowledge_Base.is_deleted == False)\
+     .group_by(AI_Knowledge_Base.kb_id)\
+     .order_by(AI_Knowledge_Base.created_at.desc())\
+     .all()
+
+    kb_list = []
+    for kb, avg, count in results:
+        # Get Author Name (Employee) if exists
+        author_name = "System"
+        if kb.employee_id:
+            emp = Employees.query.get(kb.employee_id)
+            if emp: author_name = emp.name
+
+        kb_list.append({
+            "id": kb.kb_id,
+            "question": kb.question,
+            "answer": kb.answer,
+            "author": author_name,
+            "avg_rating": round(float(avg), 1) if avg else 0,
+            "rating_count": count,
+            "created_at": kb.created_at.strftime('%Y-%m-%d')
+        })
+
+    return jsonify({"success": True, "entries": kb_list}), 200
+
+@app.route('/api/manager/kb', methods=['POST'])
+def add_kb_entry():
+    # Verify Manager
+    auth_header = request.headers.get('Authorization')
+    try:
+        token = auth_header.split(' ')[1]
+        payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+        if payload.get('role') != 'Manager': return jsonify({"success": False}), 403
+        manager_email = payload.get('email')
+    except: return jsonify({"success": False}), 401
+
+    data = request.get_json()
+    question = data.get('question')
+    answer = data.get('answer')
+
+    if not question or not answer:
+        return jsonify({"success": False, "message": "Question and Answer required"}), 400
+
+    try:
+        manager = Employees.query.filter_by(email=manager_email).first()
+        
+        new_kb = AI_Knowledge_Base(
+            employee_id=manager.employee_id,
+            question=question,
+            answer=answer,
+            created_at=datetime.now(timezone.utc),
+            is_deleted=False
+        )
+        db.session.add(new_kb)
+        db.session.commit()
+        return jsonify({"success": True, "message": "Knowledge added"}), 201
+    except Exception as e:
+        print(e)
+        return jsonify({"success": False, "message": "Database error"}), 500
 
 if __name__ == "__main__":
     app.run(debug=True)
