@@ -29,26 +29,6 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + db_path
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.secret_key = os.environ.get('FLASK_SECRET', 'dev-secret')
 
-# initialise DB
-# If the .db file doesn't exist but a schema file is present, initialize the DB from the SQL script.
-sql_schema_path = os.path.join(basedir, 'byte_and_bite.sql')
-if not os.path.exists(db_path) and os.path.exists(sql_schema_path):
-    try:
-        with open(sql_schema_path, 'r', encoding='utf-8') as f:
-            script = f.read()
-        # create sqlite database file and run schema
-        conn = sqlite3.connect(db_path)
-        conn.executescript(script)
-        conn.commit()
-        conn.close()
-    except Exception:
-        # if initialization fails, remove possibly corrupt file
-        if os.path.exists(db_path):
-            try:
-                os.remove(db_path)
-            except Exception:
-                pass
-
 
 # initialise SQLAlchemy
 db = SQLAlchemy(app)
@@ -115,6 +95,9 @@ class Orders(db.Model):
     vip_discount = db.Column(db.Numeric(10, 2), default=0.00)
     order_time = db.Column(db.DateTime, default=utc_now)
     completion_time = db.Column(db.DateTime)
+
+    delivery_address = db.Column(db.String(255))
+    delivery_phone = db.Column(db.String(20))
 
 class Order_Items(db.Model):
     __tablename__ = 'Order_Items'
@@ -187,6 +170,29 @@ class Financial_Log(db.Model):
     amount = db.Column(db.Numeric(10, 2), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+class Forum_Posts(db.Model):
+    __tablename__ = 'Forum_Posts'
+    post_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    customer_id = db.Column(db.Integer, db.ForeignKey('Customers.customer_id'), nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    category = db.Column(db.String(50), default='general')
+    created_at = db.Column(db.DateTime, default=utc_now)
+
+class Forum_Comments(db.Model):
+    __tablename__ = 'Forum_Comments'
+    comment_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    post_id = db.Column(db.Integer, db.ForeignKey('Forum_Posts.post_id'), nullable=False)
+    customer_id = db.Column(db.Integer, db.ForeignKey('Customers.customer_id'), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=utc_now)
+
+class Forum_Likes(db.Model):
+    __tablename__ = 'Forum_Likes'
+    like_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    post_id = db.Column(db.Integer, db.ForeignKey('Forum_Posts.post_id'), nullable=False)
+    customer_id = db.Column(db.Integer, db.ForeignKey('Customers.customer_id'), nullable=False)
+
 def resolve_expired_biddings():
     """
     Checks all active biddings. If 5 minutes have passed since the first bid,
@@ -229,73 +235,73 @@ def resolve_expired_biddings():
 
 
 # Create all tables (commented out since DB is initialized from SQL)
-    with app.app_context():#wei
-        db.create_all()
-    
-    # Seed dishes if not exists
-    with app.app_context():
-        if Dishes.query.count() == 0:
-            # Get chef IDs for assignment
-            chef_mario = Employees.query.filter_by(email='chef1@bytebite.com').first()
-            chef_luigi = Employees.query.filter_by(email='chef2@bytebite.com').first()
-            
-            dishes_data = [
-                {'name': 'Loaded Street Burger', 'price': 12.99, 'description': 'Double patty with special sauce, pickles, and crispy fries', 'image_url': 'https://images.unsplash.com/photo-1687937139478-1743eb2de051?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxidXJnZXIlMjBzdHJlZXQlMjBmb29kfGVufDF8fHx8MTc2MzQ4NDA4MHww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral', 'chef_id': chef_mario.employee_id if chef_mario else None},
-                {'name': 'Bao Buns', 'price': 10.99, 'description': 'Soft steamed buns with your choice of filling', 'image_url': 'https://images.unsplash.com/photo-1675096000167-4b8a276b6187?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxiYW8lMjBidW5zfGVufDF8fHx8MTc2MzQ4NDA4Mnww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral', 'chef_id': chef_luigi.employee_id if chef_luigi else None},
-                {'name': 'Fusion Ramen Bowl', 'price': 14.99, 'description': 'Rich broth with handmade noodles, egg, and fresh toppings', 'image_url': 'https://images.unsplash.com/photo-1697652974652-a2336106043b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxyYW1lbiUyMGJvd2x8ZW58MXx8fHwxNzYzNDU2NTY5fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral', 'chef_id': chef_mario.employee_id if chef_mario else None},
-                {'name': 'Korean Fried Chicken', 'price': 16.99, 'description': 'Crispy chicken with sweet and spicy glaze', 'image_url': 'https://images.unsplash.com/photo-1626645738196-c2a7c87a8f58?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxmcmllZCUyMGNoaWNrZW58ZW58MXx8fHwxNzYzNDQ1Mjc5fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral', 'chef_id': chef_luigi.employee_id if chef_luigi else None},
-                {'name': 'Street Tacos (3)', 'price': 13.99, 'description': 'Authentic street-style tacos with fresh cilantro and lime', 'image_url': 'https://images.unsplash.com/photo-1648437595587-e6a8b0cdf1f9?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzdHJlZXQlMjB0YWNvc3xlbnwxfHx8fDE3NjM0ODQwODF8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral', 'chef_id': chef_mario.employee_id if chef_mario else None},
-                {'name': 'Truffle Wagyu Burger', 'price': 29.99, 'description': 'Premium wagyu beef with black truffle aioli and gold leaf garnish', 'image_url': 'https://images.unsplash.com/photo-1571091718767-18b5b1457add?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx0cnVmZmxlJTIwYnVyZ2VyfGVufDF8fHx8MTc2MzQ4NDA4M3ww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral', 'is_vip': True, 'chef_id': chef_mario.employee_id if chef_mario else None},
-                {'name': 'Golden Foie Gras', 'price': 45.99, 'description': 'Pan-seared foie gras with edible gold dust and aged balsamic reduction', 'image_url': 'https://images.unsplash.com/photo-1546833999-b9f581a1996d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxmb2llJTIwZ3Jhc3xlbnwxfHx8fDE3NjM0ODQwODR8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral', 'is_vip': True, 'chef_id': chef_luigi.employee_id if chef_luigi else None},
-            ]
-            for data in dishes_data:
-                dish = Dishes(**data)
-                db.session.add(dish)
-            db.session.commit()
+with app.app_context():#wei
+    db.create_all()
 
-    # Seed employees if not exists
-    with app.app_context():
-        if Employees.query.count() == 0:
-            employees_data = [
-                {'name': 'John Manager', 'email': 'manager@bytebite.com', 'password_hash': generate_password_hash('manager123'), 'role': 'Manager', 'profile_image_url': 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtYW5hZ2VyJTIwcHJvZmlsZXxlbnwxfHx8fDE3NjM0ODQwODN8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral'},
-                {'name': 'Chef Mario', 'email': 'chef1@bytebite.com', 'password_hash': generate_password_hash('chef123'), 'role': 'Chef', 'profile_image_url': 'https://images.unsplash.com/photo-1583394838336-acd977736f90?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxpdGFsaWFuJTIwY2hlZnxlbnwxfHx8fDE3NjM0ODQwODR8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral'},
-                {'name': 'Chef Luigi', 'email': 'chef2@bytebite.com', 'password_hash': generate_password_hash('chef123'), 'role': 'Chef', 'profile_image_url': 'https://images.unsplash.com/photo-1559847844-5315695dadae?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxmcmVuY2glMjBjaGVmfGVufDF8fHx8MTc2MzQ4NDA4NXww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral'},
-                {'name': 'Delivery Dave', 'email': 'delivery1@bytebite.com', 'password_hash': generate_password_hash('delivery123'), 'role': 'Delivery', 'profile_image_url': 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxkZWxpdmVyeSUyMGRyaXZlcnxlbnwxfHx8fDE3NjM0ODQwODYgfDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral'},
-                {'name': 'Delivery Sarah', 'email': 'delivery2@bytebite.com', 'password_hash': generate_password_hash('delivery123'), 'role': 'Delivery', 'profile_image_url': 'https://images.unsplash.com/photo-1494790108755-2616b612b786?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxmZW1hbGUlMjBkZWxpdmVyeSUyMGRyaXZlcnxlbnwxfHx8fDE3NjM0ODQwODd8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral'},
-            ]
-            for data in employees_data:
-                employee = Employees(**data)
-                db.session.add(employee)
-            db.session.commit()
-
-        # Always ensure dishes have chef assignments
+# Seed dishes if not exists
+with app.app_context():
+    if Dishes.query.count() == 0:
+        # Get chef IDs for assignment
         chef_mario = Employees.query.filter_by(email='chef1@bytebite.com').first()
         chef_luigi = Employees.query.filter_by(email='chef2@bytebite.com').first()
         
-        if chef_mario and chef_luigi:
-            # Assign chefs to dishes
-            burger = Dishes.query.filter_by(name='Loaded Street Burger').first()
-            if burger and not burger.chef_id: burger.chef_id = chef_mario.employee_id
-            
-            bao = Dishes.query.filter_by(name='Bao Buns').first()
-            if bao and not bao.chef_id: bao.chef_id = chef_luigi.employee_id
-            
-            ramen = Dishes.query.filter_by(name='Fusion Ramen Bowl').first()
-            if ramen and not ramen.chef_id: ramen.chef_id = chef_mario.employee_id
-            
-            chicken = Dishes.query.filter_by(name='Korean Fried Chicken').first()
-            if chicken and not chicken.chef_id: chicken.chef_id = chef_luigi.employee_id
-            
-            tacos = Dishes.query.filter_by(name='Street Tacos (3)').first()
-            if tacos and not tacos.chef_id: tacos.chef_id = chef_mario.employee_id
-            
-            wagyu = Dishes.query.filter_by(name='Truffle Wagyu Burger').first()
-            if wagyu and not wagyu.chef_id: wagyu.chef_id = chef_luigi.employee_id
-            
-            foie = Dishes.query.filter_by(name='Golden Foie Gras').first()
-            if foie and not foie.chef_id: foie.chef_id = chef_mario.employee_id
-            
-            db.session.commit()
+        dishes_data = [
+            {'name': 'Loaded Street Burger', 'price': 12.99, 'description': 'Double patty with special sauce, pickles, and crispy fries', 'image_url': 'https://images.unsplash.com/photo-1687937139478-1743eb2de051?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxidXJnZXIlMjBzdHJlZXQlMjBmb29kfGVufDF8fHx8MTc2MzQ4NDA4MHww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral', 'chef_id': chef_mario.employee_id if chef_mario else None},
+            {'name': 'Bao Buns', 'price': 10.99, 'description': 'Soft steamed buns with your choice of filling', 'image_url': 'https://images.unsplash.com/photo-1675096000167-4b8a276b6187?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxiYW8lMjBidW5zfGVufDF8fHx8MTc2MzQ4NDA4Mnww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral', 'chef_id': chef_luigi.employee_id if chef_luigi else None},
+            {'name': 'Fusion Ramen Bowl', 'price': 14.99, 'description': 'Rich broth with handmade noodles, egg, and fresh toppings', 'image_url': 'https://images.unsplash.com/photo-1697652974652-a2336106043b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxyYW1lbiUyMGJvd2x8ZW58MXx8fHwxNzYzNDU2NTY5fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral', 'chef_id': chef_mario.employee_id if chef_mario else None},
+            {'name': 'Korean Fried Chicken', 'price': 16.99, 'description': 'Crispy chicken with sweet and spicy glaze', 'image_url': 'https://images.unsplash.com/photo-1626645738196-c2a7c87a8f58?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxmcmllZCUyMGNoaWNrZW58ZW58MXx8fHwxNzYzNDQ1Mjc5fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral', 'chef_id': chef_luigi.employee_id if chef_luigi else None},
+            {'name': 'Street Tacos (3)', 'price': 13.99, 'description': 'Authentic street-style tacos with fresh cilantro and lime', 'image_url': 'https://images.unsplash.com/photo-1648437595587-e6a8b0cdf1f9?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzdHJlZXQlMjB0YWNvc3xlbnwxfHx8fDE3NjM0ODQwODF8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral', 'chef_id': chef_mario.employee_id if chef_mario else None},
+            {'name': 'Truffle Wagyu Burger', 'price': 29.99, 'description': 'Premium wagyu beef with black truffle aioli and gold leaf garnish', 'image_url': 'https://images.unsplash.com/photo-1571091718767-18b5b1457add?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx0cnVmZmxlJTIwYnVyZ2VyfGVufDF8fHx8MTc2MzQ4NDA4M3ww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral', 'is_vip': True, 'chef_id': chef_mario.employee_id if chef_mario else None},
+            {'name': 'Golden Foie Gras', 'price': 45.99, 'description': 'Pan-seared foie gras with edible gold dust and aged balsamic reduction', 'image_url': 'https://images.unsplash.com/photo-1546833999-b9f581a1996d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxmb2llJTIwZ3Jhc3xlbnwxfHx8fDE3NjM0ODQwODR8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral', 'is_vip': True, 'chef_id': chef_luigi.employee_id if chef_luigi else None},
+        ]
+        for data in dishes_data:
+            dish = Dishes(**data)
+            db.session.add(dish)
+        db.session.commit()
+
+# Seed employees if not exists
+with app.app_context():
+    if Employees.query.count() == 0:
+        employees_data = [
+            {'name': 'John Manager', 'email': 'manager@bytebite.com', 'password_hash': generate_password_hash('manager123'), 'role': 'Manager', 'profile_image_url': 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtYW5hZ2VyJTIwcHJvZmlsZXxlbnwxfHx8fDE3NjM0ODQwODN8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral'},
+            {'name': 'Chef Mario', 'email': 'chef1@bytebite.com', 'password_hash': generate_password_hash('chef123'), 'role': 'Chef', 'profile_image_url': 'https://images.unsplash.com/photo-1583394838336-acd977736f90?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxpdGFsaWFuJTIwY2hlZnxlbnwxfHx8fDE3NjM0ODQwODR8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral'},
+            {'name': 'Chef Luigi', 'email': 'chef2@bytebite.com', 'password_hash': generate_password_hash('chef123'), 'role': 'Chef', 'profile_image_url': 'https://images.unsplash.com/photo-1559847844-5315695dadae?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxmcmVuY2glMjBjaGVmfGVufDF8fHx8MTc2MzQ4NDA4NXww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral'},
+            {'name': 'Delivery Dave', 'email': 'delivery1@bytebite.com', 'password_hash': generate_password_hash('delivery123'), 'role': 'Delivery', 'profile_image_url': 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxkZWxpdmVyeSUyMGRyaXZlcnxlbnwxfHx8fDE3NjM0ODQwODYgfDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral'},
+            {'name': 'Delivery Sarah', 'email': 'delivery2@bytebite.com', 'password_hash': generate_password_hash('delivery123'), 'role': 'Delivery', 'profile_image_url': 'https://images.unsplash.com/photo-1494790108755-2616b612b786?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxmZW1hbGUlMjBkZWxpdmVyeSUyMGRyaXZlcnxlbnwxfHx8fDE3NjM0ODQwODd8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral'},
+        ]
+        for data in employees_data:
+            employee = Employees(**data)
+            db.session.add(employee)
+        db.session.commit()
+
+    # Always ensure dishes have chef assignments
+    chef_mario = Employees.query.filter_by(email='chef1@bytebite.com').first()
+    chef_luigi = Employees.query.filter_by(email='chef2@bytebite.com').first()
+    
+    if chef_mario and chef_luigi:
+        # Assign chefs to dishes
+        burger = Dishes.query.filter_by(name='Loaded Street Burger').first()
+        if burger and not burger.chef_id: burger.chef_id = chef_mario.employee_id
+        
+        bao = Dishes.query.filter_by(name='Bao Buns').first()
+        if bao and not bao.chef_id: bao.chef_id = chef_luigi.employee_id
+        
+        ramen = Dishes.query.filter_by(name='Fusion Ramen Bowl').first()
+        if ramen and not ramen.chef_id: ramen.chef_id = chef_mario.employee_id
+        
+        chicken = Dishes.query.filter_by(name='Korean Fried Chicken').first()
+        if chicken and not chicken.chef_id: chicken.chef_id = chef_luigi.employee_id
+        
+        tacos = Dishes.query.filter_by(name='Street Tacos (3)').first()
+        if tacos and not tacos.chef_id: tacos.chef_id = chef_mario.employee_id
+        
+        wagyu = Dishes.query.filter_by(name='Truffle Wagyu Burger').first()
+        if wagyu and not wagyu.chef_id: wagyu.chef_id = chef_luigi.employee_id
+        
+        foie = Dishes.query.filter_by(name='Golden Foie Gras').first()
+        if foie and not foie.chef_id: foie.chef_id = chef_mario.employee_id
+        
+        db.session.commit()
 
 @app.route("/")
 def home():
@@ -1250,6 +1256,9 @@ def create_order():
     # Extract order data    
     cart_items = data.get('items', [])
     total_price = data.get('totalPrice', 0)
+    delivery_info = data.get('deliveryInfo', {})
+    full_address = f"{delivery_info.get('address', '')}, {delivery_info.get('city', '')} {delivery_info.get('zip', '')}".strip(', ')
+    contact_phone = delivery_info.get('phone', '')
 
     auth_header = request.headers.get('Authorization')
     if not auth_header:
@@ -1287,7 +1296,9 @@ def create_order():
             chef_id=chef_id, 
             status='Pending',
             total_price=order_total,
-            order_time=datetime.now(timezone.utc)
+            order_time=datetime.now(timezone.utc),
+            delivery_address=full_address if full_address else "Pickup",
+            delivery_phone=contact_phone if contact_phone else user.phone_number
         )
         db.session.add(new_order)
         db.session.flush() # Generate new_order.order_id immediately
@@ -1461,6 +1472,8 @@ def get_order_details(order_id):
             'order_time': order.order_time.isoformat() if order.order_time else None,
             'completion_time': order.completion_time.isoformat() if order.completion_time else None,
             'delivery_person_name': delivery_person_name,
+            'delivery_address': order.delivery_address,
+            'delivery_phone': order.delivery_phone,
             'items': items_data
         }
 
@@ -1510,7 +1523,8 @@ def get_available_orders():
                 "order_id": order.order_id,
                 "customer_id": order.customer_id,
                 "customer_name": customer.username,
-                "customer_address": "123 Tech Ave (Demo Address)",
+                "customer_address": order.delivery_address, 
+                "customer_phone": order.delivery_phone,
                 "status": order.status,
                 "total_price": float(order.total_price),
                 "order_time": order.order_time.isoformat()
@@ -1617,7 +1631,8 @@ def get_delivery_deliveries():
             "order_id": order.order_id,
             "customer_id": order.customer_id,
             "customer_name": customer.username,
-            "customer_address": "123 Tech Ave (Demo Address)",
+            "customer_address": order.delivery_address,
+            "customer_phone": order.delivery_phone,
             "status": order.status,
             "total_price": float(order.total_price),
             "order_time": order.order_time.isoformat()
@@ -2036,6 +2051,140 @@ def get_recommendations():
         print(f"Error in get_recommendations: {e}")
         return jsonify({"success": False, "message": "Failed to fetch recommendations"}), 500
 
+
+# Get all forum posts
+@app.route('/api/forum/posts', methods=['GET'])
+def get_forum_posts():
+    # Check if user is logged in (optional, to check 'isLiked')
+    current_user_id = None
+    auth_header = request.headers.get('Authorization')
+    if auth_header:
+        try:
+            token = auth_header.split(' ')[1]
+            payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+            user = Customers.query.filter_by(email=payload.get('email')).first()
+            if user: current_user_id = user.customer_id
+        except: pass
+
+    posts = db.session.query(Forum_Posts, Customers.username).join(Customers).order_by(Forum_Posts.created_at.desc()).all()
+    
+    result = []
+    for post, author in posts:
+        # Count likes
+        likes_count = Forum_Likes.query.filter_by(post_id=post.post_id).count()
+        # Count comments
+        comments_count = Forum_Comments.query.filter_by(post_id=post.post_id).count()
+        # Check if current user liked this post
+        is_liked = False
+        if current_user_id:
+            if Forum_Likes.query.filter_by(post_id=post.post_id, customer_id=current_user_id).first():
+                is_liked = True
+
+        result.append({
+            "id": str(post.post_id),
+            "authorName": author,
+            "title": post.title,
+            "content": post.content,
+            "category": post.category,
+            "likes": likes_count,
+            "commentCount": comments_count,
+            "createdAt": post.created_at.isoformat(),
+            "isLiked": is_liked
+        })
+    
+    return jsonify({"success": True, "posts": result}), 200
+
+# Create a new post
+@app.route('/api/forum/posts', methods=['POST'])
+def create_forum_post():
+    auth_header = request.headers.get('Authorization')
+    if not auth_header: return jsonify({"success": False, "message": "Unauthorized"}), 401
+    
+    try:
+        token = auth_header.split(' ')[1]
+        payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+        user = Customers.query.filter_by(email=payload.get('email')).first()
+    except: return jsonify({"success": False, "message": "Invalid token"}), 401
+
+    data = request.get_json()
+    new_post = Forum_Posts(
+        customer_id=user.customer_id,
+        title=data.get('title'),
+        content=data.get('content'),
+        category=data.get('category', 'general'),
+        created_at=datetime.now(timezone.utc)
+    )
+    db.session.add(new_post)
+    db.session.commit()
+    return jsonify({"success": True, "message": "Post created"}), 201
+
+# Toggle Like on a post
+@app.route('/api/forum/posts/<int:post_id>/like', methods=['POST'])
+def like_forum_post(post_id):
+    auth_header = request.headers.get('Authorization')
+    if not auth_header: return jsonify({"success": False, "message": "Unauthorized"}), 401
+    
+    try:
+        token = auth_header.split(' ')[1]
+        payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+        user = Customers.query.filter_by(email=payload.get('email')).first()
+    except: return jsonify({"success": False, "message": "Invalid token"}), 401
+
+    existing_like = Forum_Likes.query.filter_by(post_id=post_id, customer_id=user.customer_id).first()
+    
+    if existing_like:
+        db.session.delete(existing_like) # Unlike
+        action = "unliked"
+    else:
+        new_like = Forum_Likes(post_id=post_id, customer_id=user.customer_id)
+        db.session.add(new_like) # Like
+        action = "liked"
+    
+    db.session.commit()
+    return jsonify({"success": True, "action": action}), 200
+
+# Get comments for a post
+@app.route('/api/forum/posts/<int:post_id>/comments', methods=['GET'])
+def get_post_comments(post_id):
+    comments = db.session.query(Forum_Comments, Customers.username)\
+        .join(Customers)\
+        .filter(Forum_Comments.post_id == post_id)\
+        .order_by(Forum_Comments.created_at.asc())\
+        .all()
+        
+    result = []
+    for comment, author in comments:
+        result.append({
+            "id": str(comment.comment_id),
+            "postId": str(comment.post_id),
+            "authorName": author,
+            "content": comment.content,
+            "createdAt": comment.created_at.isoformat()
+        })
+    return jsonify({"success": True, "comments": result}), 200
+
+# Add a comment
+@app.route('/api/forum/posts/<int:post_id>/comments', methods=['POST'])
+def create_comment(post_id):
+    auth_header = request.headers.get('Authorization')
+    if not auth_header: return jsonify({"success": False, "message": "Unauthorized"}), 401
+    
+    try:
+        token = auth_header.split(' ')[1]
+        payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+        user = Customers.query.filter_by(email=payload.get('email')).first()
+    except: return jsonify({"success": False, "message": "Invalid token"}), 401
+
+    data = request.get_json()
+    new_comment = Forum_Comments(
+        post_id=post_id,
+        customer_id=user.customer_id,
+        content=data.get('content'),
+        created_at=datetime.now(timezone.utc)
+    )
+    db.session.add(new_comment)
+    db.session.commit()
+    return jsonify({"success": True, "message": "Comment added"}), 201
 
 if __name__ == "__main__":
     app.run(debug=True)

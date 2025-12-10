@@ -183,6 +183,34 @@ export const api = {
             body: JSON.stringify(data),
         });
     },
+    // --- Forum Operations ---
+    getForumPosts: () => {
+        return fetchAPI("forum/posts");
+    },
+
+    createForumPost: (data: { title: string; content: string; category: string }) => {
+        return fetchAPI("forum/posts", {
+            method: "POST",
+            body: JSON.stringify(data),
+        });
+    },
+
+    likeForumPost: (postId: string) => {
+        return fetchAPI(`forum/posts/${postId}/like`, {
+            method: "POST",
+        });
+    },
+
+    getPostComments: (postId: string) => {
+        return fetchAPI(`forum/posts/${postId}/comments`);
+    },
+
+    createComment: (postId: string, content: string) => {
+        return fetchAPI(`forum/posts/${postId}/comments`, {
+            method: "POST",
+            body: JSON.stringify({ content }),
+        });
+    },
 
     // Chef Operations
     getChefReviews: () => {

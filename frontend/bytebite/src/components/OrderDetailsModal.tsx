@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ImageWithFallback } from './figma/ImageWithFallback';
-import { Clock, ChefHat, X } from 'lucide-react';
+import { Clock, MapPin, Phone } from 'lucide-react'; // Added icons
 import { api } from '../utils/api';
 
 interface OrderItem {
@@ -22,6 +21,8 @@ interface OrderDetails {
   order_time: string;
   completion_time?: string;
   delivery_person_name?: string;
+  delivery_address?: string; // New
+  delivery_phone?: string;   // New
   items: OrderItem[];
 }
 
@@ -32,43 +33,29 @@ interface OrderDetailsModalProps {
 }
 
 export function OrderDetailsModal({ orderId, isOpen, onClose }: OrderDetailsModalProps) {
-  console.log('OrderDetailsModal rendered with:', { orderId, isOpen });
-  
   const [orderDetails, setOrderDetails] = useState<OrderDetails | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    console.log('OrderDetailsModal: Modal state changed - isOpen:', isOpen, 'orderId:', orderId);
-  }, [isOpen, orderId]);
-
-  useEffect(() => {
     if (orderId && isOpen) {
-      console.log('OrderDetailsModal: Loading order details for orderId:', orderId);
       loadOrderDetails();
     }
   }, [orderId, isOpen]);
 
   const loadOrderDetails = async () => {
     if (!orderId) return;
-
-    console.log('OrderDetailsModal: Starting to load order details for orderId:', orderId);
     setLoading(true);
     setError(null);
-
     try {
       const response = await api.getOrderDetails(orderId);
-      console.log('OrderDetailsModal: API response:', response);
       if (response.success) {
-        console.log('OrderDetailsModal: Setting order details:', response.order);
         setOrderDetails(response.order);
       } else {
         setError(response.message || 'Failed to load order details');
       }
     } catch (err) {
-      console.log('OrderDetailsModal: Error loading order details:', err);
       setError('Failed to load order details');
-      console.error('Error loading order details:', err);
     } finally {
       setLoading(false);
     }
@@ -76,199 +63,101 @@ export function OrderDetailsModal({ orderId, isOpen, onClose }: OrderDetailsModa
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
-      case 'pending':
-        return 'bg-yellow-600';
-      case 'preparing':
-        return 'bg-blue-600';
-      case 'ready for delivery':
-        return 'bg-orange-600';
-      case 'in transit':
-        return 'bg-purple-600';
-      case 'delivered':
-        return 'bg-green-600';
-      case 'cancelled':
-        return 'bg-red-600';
-      default:
-        return 'bg-gray-600';
+      case 'pending': return 'bg-yellow-600';
+      case 'preparing': return 'bg-blue-600';
+      case 'cooking': return 'bg-orange-500'; 
+      case 'ready for delivery': return 'bg-blue-500';
+      case 'in transit': return 'bg-orange-600';
+      case 'delivered': return 'bg-green-600';
+      default: return 'bg-gray-600';
     }
   };
 
+  if (!isOpen) return null;
+
   return (
-    <div style={{ 
-      position: 'fixed', 
-      top: 0, 
-      left: 0, 
-      right: 0, 
-      bottom: 0, 
-      background: 'rgba(0,0,0,0.5)', 
-      zIndex: 9999,
-      display: isOpen ? 'flex' : 'none',
-      alignItems: 'center',
-      justifyContent: 'center'
-    }}>
-      <div style={{
-        background: '#0f1f3a',
-        border: '1px solid rgba(0, 255, 136, 0.2)',
-        borderRadius: '8px',
-        maxWidth: '800px',
-        width: '90%',
-        maxHeight: '90vh',
-        overflow: 'auto',
-        padding: '20px'
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <h2 style={{ color: 'white' }}>Order #{orderId}</h2>
-          <button 
-            onClick={onClose}
-            style={{ 
-              background: 'none', 
-              border: 'none', 
-              color: 'white', 
-              cursor: 'pointer',
-              fontSize: '20px'
-            }}
-          >
-            ×
-          </button>
-        </div>
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-[9999]">
+      <div className="bg-[#0f1f3a] border border-[#00ff88]/20 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 relative">
+        <button 
+          onClick={onClose}
+          className="absolute top-4 right-4 text-white/50 hover:text-white text-2xl leading-none"
+        >
+          &times;
+        </button>
 
-        {loading && (
-          <div style={{ textAlign: 'center', padding: '20px' }}>
-            <div style={{ 
-              border: '2px solid #00ff88', 
-              borderTop: '2px solid transparent',
-              borderRadius: '50%',
-              width: '32px',
-              height: '32px',
-              animation: 'spin 1s linear infinite',
-              margin: '0 auto 10px'
-            }}></div>
-          </div>
-        )}
-
+        {loading && <div className="text-center text-white p-8">Loading details...</div>}
+        
         {error && (
-          <div style={{ textAlign: 'center', padding: '20px' }}>
-            <p style={{ color: 'red' }}>{error}</p>
-            <button 
-              onClick={loadOrderDetails}
-              style={{
-                background: '#00ff88',
-                color: '#0a1628',
-                border: 'none',
-                padding: '8px 16px',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                marginTop: '10px'
-              }}
-            >
-              Try Again
-            </button>
+          <div className="text-center p-8">
+            <p className="text-red-400 mb-4">{error}</p>
+            <button onClick={loadOrderDetails} className="bg-[#00ff88] text-[#0a1628] px-4 py-2 rounded">Retry</button>
           </div>
         )}
 
-        {orderDetails && (
+        {orderDetails && !loading && (
           <div>
-            {/* Order Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+            <div className="flex justify-between items-start mb-6">
               <div>
-                <div style={{ 
-                  background: getStatusColor(orderDetails.status), 
-                  color: 'white', 
-                  padding: '4px 8px', 
-                  borderRadius: '4px',
-                  display: 'inline-block',
-                  marginBottom: '10px'
-                }}>
+                <h2 className="text-2xl font-bold text-white mb-2">Order #{orderId}</h2>
+                <span className={`px-3 py-1 rounded text-white text-sm ${getStatusColor(orderDetails.status)}`}>
                   {orderDetails.status}
-                </div>
-                <div style={{ display: 'flex', gap: '16px', fontSize: '14px', color: 'rgba(255,255,255,0.7)' }}>
-                  <div>Ordered: {new Date(orderDetails.order_time).toLocaleString()}</div>
-                  {orderDetails.completion_time && (
-                    <div>Completed: {new Date(orderDetails.completion_time).toLocaleString()}</div>
+                </span>
+                <div className="mt-4 space-y-1 text-white/70 text-sm">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-[#00ff88]" />
+                    {new Date(orderDetails.order_time).toLocaleString()}
+                  </div>
+                  
+                  {/* 👇👇👇 Address Section 👇👇👇 */}
+                  {orderDetails.delivery_address && (
+                    <div className="flex items-center gap-2 mt-2 pt-2 border-t border-white/10">
+                        <MapPin className="w-4 h-4 text-[#00ff88]" />
+                        <span className="text-white font-medium">{orderDetails.delivery_address}</span>
+                    </div>
                   )}
+                  {orderDetails.delivery_phone && (
+                    <div className="flex items-center gap-2">
+                        <Phone className="w-4 h-4 text-[#00ff88]" />
+                        <span>{orderDetails.delivery_phone}</span>
+                    </div>
+                  )}
+                  {/* 👆👆👆 End Address Section 👆👆👆 */}
+
                   {orderDetails.delivery_person_name && (
-                    <div>🚚 Delivered by: {orderDetails.delivery_person_name}</div>
+                    <div className="mt-2 text-[#00ff88]">🚚 Delivered by: {orderDetails.delivery_person_name}</div>
                   )}
                 </div>
               </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '14px' }}>Total</div>
-                <div style={{ color: '#00ff88', fontSize: '24px', fontWeight: 'bold' }}>${orderDetails.total_price.toFixed(2)}</div>
+              
+              <div className="text-right">
+                <p className="text-white/70 text-sm">Total Amount</p>
+                <p className="text-3xl font-bold text-[#00ff88]">${orderDetails.total_price.toFixed(2)}</p>
                 {orderDetails.vip_discount > 0 && (
-                  <div style={{ color: '#a855f7', fontSize: '14px' }}>VIP Discount: -${orderDetails.vip_discount.toFixed(2)}</div>
+                   <p className="text-purple-400 text-sm">VIP Savings: -${orderDetails.vip_discount.toFixed(2)}</p>
                 )}
               </div>
             </div>
 
-            {/* Order Items */}
-            <div>
-              <h3 style={{ color: 'white', fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>Order Items</h3>
-              <div style={{ display: 'grid', gap: '16px' }}>
-                {orderDetails.items.map((item) => (
-                  <div key={item.dish_id} style={{ 
-                    background: '#1a2f4a', 
-                    padding: '16px', 
-                    borderRadius: '8px',
-                    border: '1px solid rgba(0,255,136,0.1)'
-                  }}>
-                    <div style={{ display: 'flex', gap: '16px' }}>
-                      <img
-                        src={item.image}
-                        alt={item.name}
-                        style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '8px' }}
-                      />
-                      <div style={{ flex: 1 }}>
-                        <h4 style={{ color: 'white', fontWeight: '500', marginBottom: '4px' }}>{item.name}</h4>
-                        <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '14px', marginBottom: '8px' }}>{item.description}</p>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                          <span style={{ color: 'rgba(0,255,136,0.8)', fontSize: '14px' }}>👨‍🍳 {item.chef_name}</span>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div style={{ display: 'flex', gap: '16px' }}>
-                            <span style={{ color: 'rgba(255,255,255,0.7)' }}>Qty: {item.quantity}</span>
-                            <span style={{ color: 'rgba(255,255,255,0.7)' }}>${item.price.toFixed(2)} each</span>
-                          </div>
-                          <span style={{ color: '#00ff88', fontWeight: '500' }}>${item.subtotal.toFixed(2)}</span>
-                        </div>
+            <h3 className="text-lg font-semibold text-white mb-4 border-b border-[#00ff88]/20 pb-2">Items</h3>
+            <div className="space-y-4">
+              {orderDetails.items.map((item, idx) => (
+                <div key={idx} className="flex gap-4 bg-[#1a2f4a] p-4 rounded-lg border border-[#00ff88]/10">
+                  <img src={item.image} alt={item.name} className="w-20 h-20 object-cover rounded-md bg-black/20" />
+                  <div className="flex-1">
+                    <div className="flex justify-between">
+                      <h4 className="text-white font-medium">{item.name}</h4>
+                      <span className="text-[#00ff88] font-medium">${item.subtotal.toFixed(2)}</span>
+                    </div>
+                    <p className="text-white/60 text-sm mb-2">{item.description}</p>
+                    <div className="flex justify-between items-end">
+                      <span className="text-xs text-[#00ff88]/70">Chef: {item.chef_name}</span>
+                      <div className="text-white/80 text-sm">
+                        {item.quantity} x ${item.price.toFixed(2)}
                       </div>
                     </div>
                   </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Order Summary */}
-            <div style={{ 
-              background: '#1a2f4a', 
-              padding: '16px', 
-              borderRadius: '8px',
-              border: '1px solid rgba(0,255,136,0.1)',
-              marginTop: '20px'
-            }}>
-              <h4 style={{ color: 'white', fontWeight: '600', marginBottom: '12px' }}>Order Summary</h4>
-              <div style={{ display: 'grid', gap: '8px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', color: 'rgba(255,255,255,0.7)' }}>
-                  <span>Subtotal</span>
-                  <span>${(orderDetails.total_price + orderDetails.vip_discount).toFixed(2)}</span>
                 </div>
-                {orderDetails.vip_discount > 0 && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#a855f7' }}>
-                    <span>VIP Discount</span>
-                    <span>-${orderDetails.vip_discount.toFixed(2)}</span>
-                  </div>
-                )}
-                <div style={{ 
-                  borderTop: '1px solid rgba(255,255,255,0.2)', 
-                  paddingTop: '8px', 
-                  display: 'flex', 
-                  justifyContent: 'space-between', 
-                  color: 'white',
-                  fontWeight: '600'
-                }}>
-                  <span>Total</span>
-                  <span style={{ color: '#00ff88' }}>${orderDetails.total_price.toFixed(2)}</span>
-                </div>
-              </div>
+              ))}
             </div>
           </div>
         )}

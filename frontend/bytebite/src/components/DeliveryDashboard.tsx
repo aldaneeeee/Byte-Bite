@@ -11,6 +11,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../utils/api';
 import { Truck, MapPin, Clock, DollarSign, CheckCircle, Package } from 'lucide-react';
 
+// 1. Updated Interface to include customer_phone
 interface Order {
   order_id: number;
   customer_id: number;
@@ -19,6 +20,7 @@ interface Order {
   order_time: string;
   customer_name?: string;
   customer_address?: string;
+  customer_phone?: string; // New field
 }
 
 interface DeliveryBid {
@@ -78,13 +80,13 @@ export function DeliveryDashboard() {
     }
 
     try {
-      // 注意：bidAmount 必须是数字
+      // Note: bidAmount must be a number
       const response = await api.placeDeliveryBid(orderId, parseFloat(bidAmount));
       if (response.success) {
         setSuccess('Bid placed successfully! Order is now assigned to you.');
         setBidAmount('');
         setSelectedOrderId(null);
-        loadData(); // 刷新列表：订单应该从 Available 移到 My Deliveries
+        loadData(); // Refresh lists
       } else {
         setError(response.message || 'Failed to place bid');
       }
@@ -98,7 +100,7 @@ export function DeliveryDashboard() {
       const response = await api.updateDeliveryStatus(orderId, newStatus);
       if (response.success) {
         setSuccess(`Delivery status updated to ${newStatus}!`);
-        loadData(); // 刷新列表：如果是 Delivered，应该从 Active Deliveries 消失
+        loadData(); // Refresh list
       } else {
         setError(response.message || 'Failed to update delivery status');
       }
@@ -151,10 +153,10 @@ export function DeliveryDashboard() {
         {success && <Alert className="mb-6 border-green-500/50 bg-green-500/10"><AlertDescription className="text-green-400">{success}</AlertDescription></Alert>}
 
         <Tabs defaultValue="available" className="space-y-6">
-          <TabsList className="bg-[#0f1f3a] border border-[#00ff88]/20">
-            <TabsTrigger value="available" className="data-[state=active]:bg-[#00ff88] data-[state=active]:text-[#0a1628]">Available Orders</TabsTrigger>
-            <TabsTrigger value="deliveries" className="data-[state=active]:bg-[#00ff88] data-[state=active]:text-[#0a1628]">My Deliveries</TabsTrigger>
-            <TabsTrigger value="bids" className="data-[state=active]:bg-[#00ff88] data-[state=active]:text-[#0a1628]">My Bids</TabsTrigger>
+          <TabsList className="bg-[#0f1f3a] border border-[#00ff88]/20 w-full justify-start">
+            <TabsTrigger value="available" className="flex-1 data-[state=active]:bg-[#00ff88] data-[state=active]:text-[#0a1628]">Available Orders</TabsTrigger>
+            <TabsTrigger value="deliveries" className="flex-1 data-[state=active]:bg-[#00ff88] data-[state=active]:text-[#0a1628]">My Deliveries</TabsTrigger>
+            <TabsTrigger value="bids" className="flex-1 data-[state=active]:bg-[#00ff88] data-[state=active]:text-[#0a1628]">My Bids</TabsTrigger>
           </TabsList>
 
           {/* Available Orders Tab */}
@@ -171,23 +173,23 @@ export function DeliveryDashboard() {
                 <Table>
                   <TableHeader>
                     <TableRow className="border-[#00ff88]/20">
-                      <TableHead className="text-white">Order #</TableHead>
-                      <TableHead className="text-white">Customer</TableHead>
-                      <TableHead className="text-white">Address</TableHead>
-                      <TableHead className="text-white">Status</TableHead>
-                      <TableHead className="text-white">Actions</TableHead>
+                      <TableHead className="text-white h-12 align-middle w-1/6 text-left">Order #</TableHead>
+                      <TableHead className="text-white h-12 align-middle w-1/4 text-left">Customer</TableHead>
+                      <TableHead className="text-white h-12 align-middle w-1/4 text-left">Address</TableHead>
+                      <TableHead className="text-white h-12 align-middle w-1/6 text-center">Status</TableHead>
+                      <TableHead className="text-white h-12 align-middle w-1/6 text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {availableOrders.map((order) => (
-                      <TableRow key={order.order_id} className="border-[#00ff88]/10">
-                        <TableCell className="text-white">#{order.order_id}</TableCell>
-                        <TableCell className="text-white">{order.customer_name}</TableCell>
-                        <TableCell className="text-white max-w-xs truncate">{order.customer_address}</TableCell>
-                        <TableCell>{getStatusBadge(order.status)}</TableCell>
-                        <TableCell>
+                      <TableRow key={order.order_id} className="border-[#00ff88]/10 h-16">
+                        <TableCell className="text-white align-middle text-left">#{order.order_id}</TableCell>
+                        <TableCell className="text-white align-middle text-left">{order.customer_name}</TableCell>
+                        
+                        <TableCell className="align-middle text-center">{getStatusBadge(order.status)}</TableCell>
+                        <TableCell className="align-middle text-right">
                           <Button size="sm" onClick={() => setSelectedOrderId(order.order_id)} className="bg-[#00ff88] hover:bg-[#00dd77] text-[#0a1628]">
-                            <DollarSign className="w-4 h-4 mr-1" /> Bid to Deliver
+                            <DollarSign className="w-4 h-4 mr-1" /> Bid
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -213,13 +215,18 @@ export function DeliveryDashboard() {
                         <div className="flex justify-between items-center">
                             <div>
                                 <h3 className="font-bold text-white text-lg">Order #{order.order_id}</h3>
+                                {/* Address Display */}
                                 <div className="flex items-center gap-2 text-white/70 mt-1">
                                     <MapPin className="w-4 h-4 text-[#00ff88]" />
                                     <span>{order.customer_address}</span>
                                 </div>
+                                {/* Customer Name & Phone Display */}
                                 <div className="flex items-center gap-2 text-white/70 mt-1">
                                     <Package className="w-4 h-4 text-[#00ff88]" />
                                     <span>{order.customer_name}</span>
+                                    {order.customer_phone && (
+                                        <span className="text-sm text-white/50">({order.customer_phone})</span>
+                                    )}
                                 </div>
                             </div>
                             <div className="flex flex-col items-end gap-2">
@@ -247,19 +254,19 @@ export function DeliveryDashboard() {
                 <Table>
                   <TableHeader>
                     <TableRow className="border-[#00ff88]/20">
-                      <TableHead className="text-white">Order #</TableHead>
-                      <TableHead className="text-white">Bid Amount</TableHead>
-                      <TableHead className="text-white">Time</TableHead>
-                      <TableHead className="text-white">Result</TableHead>
+                      <TableHead className="text-white h-12 align-middle text-left w-1/4">Order #</TableHead>
+                      <TableHead className="text-white h-12 align-middle text-left w-1/4">Bid Amount</TableHead>
+                      <TableHead className="text-white h-12 align-middle text-left w-1/4">Time</TableHead>
+                      <TableHead className="text-white h-12 align-middle text-center w-1/4">Result</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {myBids.map((bid) => (
-                      <TableRow key={bid.bid_id} className="border-[#00ff88]/10">
-                        <TableCell className="text-white">#{bid.order_id}</TableCell>
-                        <TableCell className="text-white">${bid.bid_amount.toFixed(2)}</TableCell>
-                        <TableCell className="text-white">{new Date(bid.bid_time).toLocaleString()}</TableCell>
-                        <TableCell>
+                      <TableRow key={bid.bid_id} className="border-[#00ff88]/10 h-16">
+                        <TableCell className="text-white align-middle text-left">#{bid.order_id}</TableCell>
+                        <TableCell className="text-white align-middle text-left">${bid.bid_amount.toFixed(2)}</TableCell>
+                        <TableCell className="text-white align-middle text-left">{new Date(bid.bid_time).toLocaleString()}</TableCell>
+                        <TableCell className="align-middle text-center">
                           {bid.is_winning_bid ? <Badge className="bg-green-500 text-white">Won</Badge> : <Badge variant="secondary" className="text-white">Pending</Badge>}
                         </TableCell>
                       </TableRow>
