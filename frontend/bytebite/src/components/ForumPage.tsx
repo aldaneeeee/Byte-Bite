@@ -5,9 +5,15 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { Separator } from './ui/separator';
+<<<<<<< Updated upstream
 import { MessageSquare, ThumbsUp, Send, Plus, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../utils/api'; // Import api
+=======
+import { MessageSquare, ThumbsUp, Send, Plus, User, Calendar, Flag, X, Heart } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { api } from '../utils/api';
+>>>>>>> Stashed changes
 
 // Interface for forum post
 interface ForumPost {
@@ -18,9 +24,11 @@ interface ForumPost {
   content: string;
   category: string;
   likes: number;
+  compliments: number;
   commentCount: number;
   createdAt: string;
   isLiked?: boolean;
+  isComplimented?: boolean;
 }
 
 // Interface for comment
@@ -30,6 +38,10 @@ interface Comment {
   authorName: string;
   content: string;
   createdAt: string;
+  likes: number;
+  compliments: number;
+  isLiked?: boolean;
+  isComplimented?: boolean;
 }
 
 export function ForumPage() {
@@ -109,6 +121,102 @@ export function ForumPage() {
     }
   };
 
+  const handleLikeComment = async (commentId: string) => {
+    // Optimistic UI update
+    setComments(comments.map(comment => {
+      if (comment.id === commentId) {
+        return {
+          ...comment,
+          likes: comment.isLiked ? comment.likes - 1 : comment.likes + 1,
+          isLiked: !comment.isLiked,
+        };
+      }
+      return comment;
+    }));
+
+    try {
+        await api.likeForumComment(commentId);
+        // We can reload to be sure, or trust the optimistic update
+        // const commentsRes = await api.getPostComments(selectedPost!.id);
+        // if (commentsRes.success) setComments(commentsRes.comments);
+    } catch (err) {
+        console.error("Like failed", err);
+        // Revert on error
+        setComments(comments.map(comment => {
+          if (comment.id === commentId) {
+            return {
+              ...comment,
+              likes: comment.isLiked ? comment.likes + 1 : comment.likes - 1,
+              isLiked: !comment.isLiked,
+            };
+          }
+          return comment;
+        }));
+    }
+  };
+
+  const handleComplimentPost = async (postId: string) => {
+    // Optimistic UI update
+    setPosts(posts.map(post => {
+      if (post.id === postId) {
+        return {
+          ...post,
+          compliments: post.compliments + 1,
+          isComplimented: true,
+        };
+      }
+      return post;
+    }));
+
+    try {
+        await api.complimentForumPost(postId);
+    } catch (err) {
+        console.error("Compliment failed", err);
+        // Revert on error
+        setPosts(posts.map(post => {
+          if (post.id === postId) {
+            return {
+              ...post,
+              compliments: post.compliments - 1,
+              isComplimented: false,
+            };
+          }
+          return post;
+        }));
+    }
+  };
+
+  const handleComplimentComment = async (commentId: string) => {
+    // Optimistic UI update
+    setComments(comments.map(comment => {
+      if (comment.id === commentId) {
+        return {
+          ...comment,
+          compliments: comment.compliments + 1,
+          isComplimented: true,
+        };
+      }
+      return comment;
+    }));
+
+    try {
+        await api.complimentForumComment(commentId);
+    } catch (err) {
+        console.error("Compliment failed", err);
+        // Revert on error
+        setComments(comments.map(comment => {
+          if (comment.id === commentId) {
+            return {
+              ...comment,
+              compliments: comment.compliments - 1,
+              isComplimented: false,
+            };
+          }
+          return comment;
+        }));
+    }
+  };
+
   const handleViewPost = async (post: ForumPost) => {
     setSelectedPost(post);
     // Load comments
@@ -144,6 +252,40 @@ export function ForumPage() {
     }
   };
 
+<<<<<<< Updated upstream
+=======
+  // Handle opening report modal
+  const handleOpenReport = (contentId: string, contentType: 'post' | 'comment') => {
+    setReportForm({
+      contentId,
+      contentType,
+      reason: ''
+    });
+    setShowReportModal(true);
+  };
+
+  // Handle submitting a report
+  const handleSubmitReport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reportForm.reason.trim()) return;
+
+    try {
+      const res = await api.reportForumContent(reportForm);
+      if (res.success) {
+        alert('Report submitted successfully. A manager will review it.');
+        setShowReportModal(false);
+        setReportForm({ contentId: '', contentType: '', reason: '' });
+      } else {
+        alert('Failed to submit report. Please try again.');
+      }
+    } catch (error) {
+      console.error('Failed to submit report:', error);
+      alert('Failed to submit report. Please try again.');
+    }
+  };
+
+  // Format date for display
+>>>>>>> Stashed changes
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -254,6 +396,13 @@ export function ForumPage() {
                     >
                       <ThumbsUp className="w-4 h-4" /> {post.likes}
                     </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleComplimentPost(post.id); }}
+                      disabled={post.isComplimented}
+                      className={`flex items-center gap-1 hover:text-pink-400 transition-colors ${post.isComplimented ? 'text-pink-400' : ''}`}
+                    >
+                      <Heart className="w-4 h-4" /> {post.compliments}
+                    </button>
                     <div className="flex items-center gap-1">
                       <MessageSquare className="w-4 h-4" /> {post.commentCount}
                     </div>
@@ -277,6 +426,34 @@ export function ForumPage() {
                       <div className="flex items-center gap-2 mb-2">
                         <span className="text-[#00ff88] font-bold text-xs">{comment.authorName}</span>
                         <span className="text-white/40 text-xs ml-auto">{formatDate(comment.createdAt)}</span>
+<<<<<<< Updated upstream
+=======
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleLikeComment(comment.id); }}
+                          className={`flex items-center gap-1 hover:text-[#00ff88] transition-colors text-xs ${comment.isLiked ? 'text-[#00ff88]' : 'text-white/40'}`}
+                          title="Like comment"
+                        >
+                          <ThumbsUp className="w-3 h-3" /> {comment.likes}
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleComplimentComment(comment.id); }}
+                          disabled={comment.isComplimented}
+                          className={`flex items-center gap-1 hover:text-pink-400 transition-colors text-xs ${comment.isComplimented ? 'text-pink-400' : 'text-white/40'}`}
+                          title="Compliment comment"
+                        >
+                          <Heart className="w-3 h-3" /> {comment.compliments}
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenReport(comment.id, 'comment');
+                          }}
+                          className="text-white/40 hover:text-red-400 transition-colors ml-2"
+                          title="Report comment"
+                        >
+                          <Flag className="w-3 h-3" />
+                        </button>
+>>>>>>> Stashed changes
                       </div>
                       <p className="text-white/80 text-sm">{comment.content}</p>
                     </div>

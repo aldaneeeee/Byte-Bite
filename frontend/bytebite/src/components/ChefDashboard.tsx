@@ -40,6 +40,137 @@ interface ChefOrder {
   customer_id: number;
 }
 
+interface Complaint {
+  complaint_id: number;
+  complainant_type: string;
+  complainant_id: number;
+  accused_type: string;
+  accused_id: number;
+  category: string;
+  description: string;
+  status: string;
+  created_at: string;
+  reviewed_at?: string;
+  appeal_message?: string;
+  appeal_submitted_at?: string;
+}
+
+interface ComplaintCardProps {
+  complaint: Complaint;
+  onAppealSubmitted: () => void;
+}
+
+function ComplaintCard({ complaint, onAppealSubmitted }: ComplaintCardProps) {
+  const [showAppealForm, setShowAppealForm] = useState(false);
+  const [appealMessage, setAppealMessage] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmitAppeal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!appealMessage.trim()) return;
+
+    setSubmitting(true);
+    try {
+      const response = await api.appealComplaint(complaint.complaint_id, { appeal_message: appealMessage });
+      if (response.success) {
+        setShowAppealForm(false);
+        setAppealMessage('');
+        onAppealSubmitted();
+      } else {
+        alert('Failed to submit appeal');
+      }
+    } catch (err) {
+      console.error('Failed to submit appeal', err);
+      alert('Failed to submit appeal');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="bg-[#1a2f4a] p-4 rounded-lg border border-[#00ff88]/10">
+      <div className="flex justify-between items-start mb-3">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[#00ff88] font-bold text-sm">
+              Complaint #{complaint.complaint_id}
+            </span>
+            <Badge className={`text-xs ${complaint.status === 'pending' ? 'bg-yellow-500' : complaint.status === 'reviewed' ? 'bg-blue-500' : 'bg-green-500'}`}>
+              {complaint.status}
+            </Badge>
+          </div>
+          <p className="text-white/60 text-xs">
+            Filed by {complaint.complainant_type} #{complaint.complainant_id} • {new Date(complaint.created_at).toLocaleDateString()}
+          </p>
+        </div>
+      </div>
+
+      <div className="mb-3">
+        <p className="text-white/80 font-medium text-sm mb-1">Category: {complaint.category}</p>
+        <p className="text-white/70 text-sm">{complaint.description}</p>
+      </div>
+
+      {complaint.appeal_message && (
+        <div className="mb-3 p-3 bg-[#0f1f3a] rounded border-l-2 border-[#00ff88]">
+          <p className="text-[#00ff88] font-medium text-sm mb-1">Your Appeal:</p>
+          <p className="text-white/70 text-sm">{complaint.appeal_message}</p>
+          <p className="text-white/40 text-xs mt-1">
+            Submitted: {new Date(complaint.appeal_submitted_at!).toLocaleDateString()}
+          </p>
+        </div>
+      )}
+
+      {!complaint.appeal_message && (complaint.status === 'pending' || complaint.status === 'notified') && (
+        <div className="flex gap-2">
+          {!showAppealForm ? (
+            <Button
+              onClick={() => setShowAppealForm(true)}
+              size="sm"
+              variant="outline"
+              className="border-[#00ff88]/30 text-[#00ff88] hover:bg-[#00ff88]/10"
+            >
+              Submit Appeal
+            </Button>
+          ) : (
+            <form onSubmit={handleSubmitAppeal} className="flex-1 space-y-2">
+              <Textarea
+                value={appealMessage}
+                onChange={(e) => setAppealMessage(e.target.value)}
+                placeholder="Enter your appeal message..."
+                className="bg-[#0f1f3a] border-[#00ff88]/30 text-white text-sm"
+                rows={3}
+                required
+              />
+              <div className="flex gap-2">
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={submitting}
+                  className="bg-[#00ff88] hover:bg-[#00dd77] text-[#0a1628]"
+                >
+                  {submitting ? 'Submitting...' : 'Submit Appeal'}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setShowAppealForm(false);
+                    setAppealMessage('');
+                  }}
+                  size="sm"
+                  variant="outline"
+                  className="border-[#00ff88]/30 text-white"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ChefDashboard() {
   const [dishes, setDishes] = useState<Dish[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,6 +180,7 @@ export function ChefDashboard() {
   
   const [activeOrders, setActiveOrders] = useState<ChefOrder[]>([]); // wei
   const [reviews, setReviews] = useState<any[]>([]); // wei
+  const [complaints, setComplaints] = useState<Complaint[]>([]);
 
   // New dish form
   const [newDish, setNewDish] = useState({
@@ -75,7 +207,7 @@ export function ChefDashboard() {
 
   const loadData = async () => {
     setLoading(true);
-    await Promise.all([loadDishes(), loadOrders()]);
+    await Promise.all([loadDishes(), loadOrders(), loadComplaints()]);
     setLoading(false);
   };
 
@@ -101,6 +233,17 @@ export function ChefDashboard() {
       }
     } catch (err) {
       console.error("Failed to load orders", err);
+    }
+  };
+
+  const loadComplaints = async () => {
+    try {
+      const res = await api.getComplaints();
+      if (res.success) {
+        setComplaints(res.complaints);
+      }
+    } catch (err) {
+      console.error("Failed to load complaints", err);
     }
   };
 
@@ -253,6 +396,9 @@ export function ChefDashboard() {
             </TabsTrigger>
             <TabsTrigger value="reviews" className="data-[state=active]:bg-[#00ff88] data-[state=active]:text-[#0a1628]">
               Reviews & Ratings
+            </TabsTrigger>
+            <TabsTrigger value="complaints" className="data-[state=active]:bg-[#00ff88] data-[state=active]:text-[#0a1628]">
+              Complaints
             </TabsTrigger>
           </TabsList>
 
@@ -505,6 +651,42 @@ export function ChefDashboard() {
               </div>
             </Card>
           </TabsContent>
+
+          {/* Complaints Tab */}
+          <TabsContent value="complaints">
+            <Card className="bg-[#0f1f3a] border-[#00ff88]/20">
+              <div className="p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-semibold">Complaints & Appeals</h2>
+                  <Button 
+                    onClick={loadComplaints}
+                    variant="outline"
+                    size="sm"
+                    className="border-[#00ff88]/30 text-white hover:bg-[#00ff88]/10"
+                  >
+                    Refresh Complaints
+                  </Button>
+                </div>
+
+                <div className="space-y-4 max-h-[500px] overflow-y-auto">
+                  {complaints.length === 0 && (
+                    <div className="text-white/50 text-center py-8">
+                      No complaints found.
+                    </div>
+                  )}
+                  
+                  {complaints.map((complaint) => (
+                    <ComplaintCard 
+                      key={complaint.complaint_id} 
+                      complaint={complaint} 
+                      onAppealSubmitted={loadComplaints}
+                    />
+                  ))}
+                </div>
+              </div>
+            </Card>
+          </TabsContent>
+
         </Tabs>
 
         {/* Edit Dish Modal */}

@@ -8,12 +8,13 @@ import { Minus, Plus, Trash2, ShoppingBag, LogIn } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import { useState, useEffect } from 'react';
-import { api } from '../utils/api';
+import { api, UserProfile } from '../utils/api';
 
 // Checkout Page component - shows cart items, order summary, and delivery form
 export function CheckoutPage() {
   const { cart, removeFromCart, updateQuantity, getTotalPrice, clearCart } = useCart();
   const [orderPlaced, setOrderPlaced] = useState(false);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -27,12 +28,19 @@ export function CheckoutPage() {
   const navigate = useNavigate();
   const totalPrice = getTotalPrice();
 
+  // Calculate delivery fee based on VIP status and order count
+  const getDeliveryFee = () => {
+    if (!userProfile?.is_vip) return 5;
+    return ((userProfile.order_count || 0) + 1) % 3 === 0 ? 0 : 5;
+  };
+
   // Load profile for autofill
   useEffect(() => {
     const loadProfile = async () => {
       try {
         const response = await api.getProfile();
         if (response.success && response.user) {
+          setUserProfile(response.user);
           setFormData(f => ({
             ...f,
             name: response.user.username || '',
@@ -51,11 +59,11 @@ export function CheckoutPage() {
   const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault(); 
 
-    // 1. Calculate Totals
+    // 1. Calculate Totals (subtotal only, backend will add delivery fee)
     const subtotal = getTotalPrice();
+    const vipDiscount = userProfile?.is_vip ? subtotal * 0.05 : 0;
     const tax = subtotal * 0.1;
-    const delivery = 5;
-    const total = subtotal + tax + delivery;
+    const total = subtotal - vipDiscount + tax; // Don't include delivery fee here
 
     // 2. Validate Inputs (Simple check)
     if (!formData.address || !formData.city || !formData.zip) {
@@ -216,9 +224,17 @@ export function CheckoutPage() {
                 <span>Subtotal</span>
                 <span>${totalPrice.toFixed(2)}</span>
               </div>
+              {userProfile?.is_vip && (
+                <div className="flex justify-between text-[#00ff88]">
+                  <span>VIP Discount (5%)</span>
+                  <span>-${(totalPrice * 0.05).toFixed(2)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-white/70">
                 <span>Delivery Fee</span>
-                <span>$5.00</span>
+                <span className={userProfile?.is_vip ? 'text-[#00ff88]' : ''}>
+                  ${getDeliveryFee().toFixed(2)}{userProfile?.is_vip && getDeliveryFee() === 0 ? ' (Free!)' : ''}
+                </span>
               </div>
               <div className="flex justify-between text-white/70">
                 <span>Tax</span>
@@ -228,7 +244,13 @@ export function CheckoutPage() {
               <div className="flex justify-between">
                 <span className="text-white">Total</span>
                 <span className="text-[#00ff88]">
-                  ${(totalPrice + 5 + totalPrice * 0.1).toFixed(2)}
+                  ${(() => {
+                    const subtotal = totalPrice;
+                    const vipDiscount = userProfile?.is_vip ? subtotal * 0.05 : 0;
+                    const tax = subtotal * 0.1;
+                    const delivery = getDeliveryFee();
+                    return (subtotal - vipDiscount + tax + delivery).toFixed(2);
+                  })()}
                 </span>
               </div>
             </div>

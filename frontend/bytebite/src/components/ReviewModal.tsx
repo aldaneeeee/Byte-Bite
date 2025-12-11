@@ -18,6 +18,10 @@ export function ReviewModal({ orderId, onClose, onSuccess }: ReviewModalProps) {
   const [comment, setComment] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [complimentChef, setComplimentChef] = useState(false);
+  const [complaintChef, setComplaintChef] = useState(false);
+  const [complimentDelivery, setComplimentDelivery] = useState(false);
+  const [complaintDelivery, setComplaintDelivery] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,7 +37,11 @@ export function ReviewModal({ orderId, onClose, onSuccess }: ReviewModalProps) {
         chef_rating: chefRating,
         dish_rating: dishRating,
         delivery_rating: deliveryRating,
-        comment
+        comment,
+        compliment_chef: complimentChef,
+        complaint_chef: complaintChef,
+        compliment_delivery: complimentDelivery,
+        complaint_delivery: complaintDelivery
       });
       
       if (res.success) {
@@ -97,6 +105,52 @@ export function ReviewModal({ orderId, onClose, onSuccess }: ReviewModalProps) {
           <div>
             <label className="block text-white mb-2">How was the Delivery?</label>
             {renderStars(deliveryRating, setDeliveryRating)}
+          </div>
+
+          <div>
+            <label className="block text-white mb-2">Additional Feedback</label>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="compliment-chef"
+                  checked={complimentChef}
+                  onChange={(e) => setComplimentChef(e.target.checked)}
+                  className="rounded"
+                />
+                <label htmlFor="compliment-chef" className="text-white text-sm">Compliment the Chef</label>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="complaint-chef"
+                  checked={complaintChef}
+                  onChange={(e) => setComplaintChef(e.target.checked)}
+                  className="rounded"
+                />
+                <label htmlFor="complaint-chef" className="text-white text-sm">Complain about the Chef</label>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="compliment-delivery"
+                  checked={complimentDelivery}
+                  onChange={(e) => setComplimentDelivery(e.target.checked)}
+                  className="rounded"
+                />
+                <label htmlFor="compliment-delivery" className="text-white text-sm">Compliment the Delivery</label>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="complaint-delivery"
+                  checked={complaintDelivery}
+                  onChange={(e) => setComplaintDelivery(e.target.checked)}
+                  className="rounded"
+                />
+                <label htmlFor="complaint-delivery" className="text-white text-sm">Complain about the Delivery</label>
+              </div>
+            </div>
           </div>
 
           <div>

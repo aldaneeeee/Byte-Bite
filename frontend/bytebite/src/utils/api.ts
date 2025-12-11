@@ -43,9 +43,13 @@ export interface UserProfile {
     phone_number: string;
     order_count: number;
     created_at?: string;
+    is_vip?: boolean;
 }
 
 export interface UpdateProfilePayload {
+    username?: string;
+    email?: string;
+    phone_number?: string;
     name?: string;
     address?: string;
     deposited_cash?: number;
@@ -177,19 +181,8 @@ export const api = {
     createOrder: (order: OrderPayload) => fetchAPI("orders", { method: "POST", body: JSON.stringify(order) }),
     
     // Reviews //wei
-    createReview: (data: { order_id: number, chef_rating: number, dish_rating: number, delivery_rating: number,comment: string }) => {
+    createReview: (data: { order_id: number, chef_rating: number, dish_rating: number, delivery_rating: number, comment: string, compliment_chef?: boolean, complaint_chef?: boolean, compliment_delivery?: boolean, complaint_delivery?: boolean }) => {
         return fetchAPI("reviews", {
-            method: "POST",
-            body: JSON.stringify(data),
-        });
-    },
-    // --- Forum Operations ---
-    getForumPosts: () => {
-        return fetchAPI("forum/posts");
-    },
-
-    createForumPost: (data: { title: string; content: string; category: string }) => {
-        return fetchAPI("forum/posts", {
             method: "POST",
             body: JSON.stringify(data),
         });
@@ -201,16 +194,26 @@ export const api = {
         });
     },
 
-    getPostComments: (postId: string) => {
-        return fetchAPI(`forum/posts/${postId}/comments`);
-    },
-
-    createComment: (postId: string, content: string) => {
-        return fetchAPI(`forum/posts/${postId}/comments`, {
+    likeForumComment: (commentId: string) => {
+        return fetchAPI(`forum/comments/${commentId}/like`, {
             method: "POST",
-            body: JSON.stringify({ content }),
         });
     },
+
+    complimentForumPost: (postId: string) => {
+        return fetchAPI(`forum/posts/${postId}/compliment`, {
+            method: "POST",
+        });
+    },
+
+    complimentForumComment: (commentId: string) => {
+        return fetchAPI(`forum/comments/${commentId}/compliment`, {
+            method: "POST",
+        });
+    },
+
+    
+
 
     // Chef Operations
     getChefReviews: () => {
@@ -292,6 +295,19 @@ export const api = {
             method: "DELETE",
         });
     },
+    // Toggle VIP status
+    updateCustomerVIP: (customerId: number, promote: boolean) => {
+        return fetchAPI(`manager/customers/${customerId}/vip`, {
+            method: "PUT",
+            body: JSON.stringify({ promote }),
+        });
+    },
+    // Add warning to customer
+    addCustomerWarning: (customerId: number) => {
+        return fetchAPI(`manager/customers/${customerId}/warning`, {
+            method: "POST",
+        });
+    },
 
     getFinancialLogs: () => {
         return fetchAPI("manager/financials");
@@ -322,6 +338,17 @@ export const api = {
         return fetchAPI("delivery/update-status", {
             method: "POST",
             body: JSON.stringify({ order_id: orderId, status: status }),
+        });
+    },
+
+    getDeliveryFeedbackCategories: () => {
+        return fetchAPI("delivery/feedback-categories");
+    },
+
+    submitDeliveryCustomerFeedback: (data: { order_id: number, feedback_type: 'complaint' | 'compliment', category: string, description: string }) => {
+        return fetchAPI("delivery/customer-feedback", {
+            method: "POST",
+            body: JSON.stringify(data),
         });
     },
     getManagerBiddings: () => {
@@ -390,11 +417,46 @@ export const api = {
         });
     },
 
+    deleteKnowledgeEntry: (kbId: number) => {
+        return fetchAPI(`manager/kb/${kbId}`, {
+            method: "DELETE",
+        });
+    },
 
+
+<<<<<<< Updated upstream
+=======
+    // Forum operations
+    getForumPosts: () => fetchAPI("forum/posts"),
+    createForumPost: (post: any) => fetchAPI("forum/posts", { method: "POST", body: JSON.stringify(post) }),
+    getPostComments: (postId: string) => fetchAPI(`forum/posts/${postId}/comments`),
+    createComment: (postId: string, comment: string) => fetchAPI(`forum/posts/${postId}/comments`, { method: "POST", body: JSON.stringify({ content: comment }) }),
+    reportForumContent: (report: any) => fetchAPI("forum/reports", { method: "POST", body: JSON.stringify(report) }),
+    getForumReports: () => fetchAPI("manager/forum-reports"),
+    updateReportStatus: (reportId: number, status: string) => fetchAPI(`manager/forum-reports/${reportId}`, { method: "PUT", body: JSON.stringify({ status }) }),
+
+    // Notification endpoints
+    getUserNotifications: () => fetchAPI("user/notifications"),
+    markNotificationRead: (notificationId: number) => fetchAPI(`user/notifications/${notificationId}/read`, { method: "PUT" }),
+
+    // Complaint endpoints
+    fileComplaint: (complaint: any) => fetchAPI("complaints", { method: "POST", body: JSON.stringify(complaint) }),
+    getComplaints: () => fetchAPI("complaints"),
+    reviewComplaint: (complaintId: string, review: any) => fetchAPI(`complaints/${complaintId}/review`, { method: "PUT", body: JSON.stringify(review) }),
+    disputeComplaint: (complaintId: number, dispute: any) => fetchAPI(`complaints/${complaintId}/dispute`, { method: "PUT", body: JSON.stringify(dispute) }),
+    appealComplaint: (complaintId: number, appeal: any) => fetchAPI(`complaints/${complaintId}/appeal`, { method: "POST", body: JSON.stringify(appeal) }),
+    reviewAppeal: (complaintId: number, review: any) => fetchAPI(`complaints/${complaintId}/review-appeal`, { method: "PUT", body: JSON.stringify(review) }),
+    notifyComplaintAccused: (complaintId: number) => fetchAPI(`complaints/${complaintId}/notify`, { method: "POST" }),
+    updateComplaintStatus: (complaintId: number, status: string) => fetchAPI(`complaints/${complaintId}/status`, { method: "PUT", body: JSON.stringify({ status }) }),
+
+    // Forum report endpoints
+    appealForumReport: (reportId: number, appeal: any) => fetchAPI(`forum-reports/${reportId}/appeal`, { method: "POST", body: JSON.stringify(appeal) }),
+    reviewForumAppeal: (reportId: number, review: any) => fetchAPI(`manager/forum-reports/${reportId}/review-appeal`, { method: "POST", body: JSON.stringify(review) }),
+>>>>>>> Stashed changes
 
     // Public endpoints for home page
     getRecommendations: () => fetchAPI("recommendations"),
     getFeaturedChefs: () => fetchAPI("chefs/featured"),
-    getRecentOrders: () => fetchAPI("orders"),
+    getRecentOrders: () => fetchAPI("orders/recent"),
     getOrderDetails: (orderId: number) => fetchAPI(`orders/${orderId}`),
 };

@@ -25,7 +25,7 @@ export function HomePage() {
       id: dish.id.toString(),
       name: dish.name,
       price: dish.price,
-      image: dish.image,
+      image: dish.image || dish.image_url,
       description: dish.description,
       chef_name: dish.chef?.name,
       rating: dish.rating,
@@ -37,7 +37,6 @@ export function HomePage() {
   };
 
   const handleOrderClick = (orderId: number) => {
-    console.log('HomePage: Order clicked with orderId:', orderId);
     setSelectedOrderId(orderId);
     setOrderModalOpen(true);
   };
@@ -50,17 +49,14 @@ export function HomePage() {
   useEffect(() => {
     const loadHomeData = async () => {
       try {
-        // Prepare API calls - only include getRecentOrders if user is authenticated
+        // Prepare API calls - always include getRecentOrders
         const apiCalls = [
           api.getRecommendations(),
-          api.getFeaturedChefs()
+          api.getFeaturedChefs(),
+          api.getRecentOrders()
         ];
-        
-        if (isAuthenticated()) {
-          apiCalls.push(api.getRecentOrders());
-        }
 
-        const [recsResponse, chefsResponse, ...remainingResponses] = await Promise.all(apiCalls);
+        const [recsResponse, chefsResponse, ordersResponse] = await Promise.all(apiCalls);
         
         if (recsResponse.success) {
           setRecommendations(recsResponse.recommendations);
@@ -68,10 +64,8 @@ export function HomePage() {
         if (chefsResponse.success) {
           setFeaturedChefs(chefsResponse.chefs);
         }
-        
-        // Handle orders response if it was called
-        if (remainingResponses.length > 0 && remainingResponses[0].success) {
-          setRecentOrders(remainingResponses[0].orders);
+        if (ordersResponse.success) {
+          setRecentOrders(ordersResponse.orders);
         }
       } catch (error) {
         console.error('Failed to load home data:', error);
@@ -123,20 +117,20 @@ export function HomePage() {
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="text-center mb-12">
           <h2 className="mb-4 text-white">
-            {recommendations?.type === 'personalized' ? 'Your Favorites' : <>Popular <span className="text-[#00ff88]">Choices</span></>}
+            {recommendations?.type === 'personalized' ? 'Your Favorites' : <>Top Rated <span className="text-[#00ff88]">Dishes</span></>}
           </h2>
           <p className="text-white/70 max-w-2xl mx-auto">
             {recommendations?.type === 'personalized' 
               ? 'Based on your order history and preferences'
-              : 'Our most loved dishes and highest rated creations'
+              : 'Our highest rated dishes loved by customers'
             }
           </p>
         </div>
         
-        {/* Most Ordered / Most Popular */}
+        {/* Most Ordered / Top Rated for general users */}
         <div className="mb-12">
           <h3 className="text-xl font-semibold text-white mb-6">
-            {recommendations?.type === 'personalized' ? 'Your Most Ordered' : 'Most Popular'}
+            {recommendations?.type === 'personalized' ? 'Your Most Ordered' : 'Most Popular Dishes'}
           </h3>
           <div className="grid md:grid-cols-3 gap-8">
             {loading ? (
@@ -159,16 +153,23 @@ export function HomePage() {
                 <div className="p-6">
                   <div className="flex justify-between items-start mb-2">
                     <h3 className="text-white">{dish.name}</h3>
-                    {dish.order_count && (
-                      <Badge className="bg-[#00ff88]/10 text-[#00ff88]">
-                        Ordered {dish.order_count}x
-                      </Badge>
-                    )}
-                    {dish.total_orders && (
-                      <Badge className="bg-[#00ff88]/10 text-[#00ff88]">
-                        {dish.total_orders} orders
-                      </Badge>
-                    )}
+                    <div className="flex flex-col items-end gap-1">
+                      {dish.order_count && (
+                        <Badge className="bg-[#00ff88]/10 text-[#00ff88]">
+                          Ordered {dish.order_count}x
+                        </Badge>
+                      )}
+                      {dish.total_orders && (
+                        <Badge className="bg-[#00ff88]/10 text-[#00ff88]">
+                          {dish.total_orders} orders
+                        </Badge>
+                      )}
+                      {dish.rating && (
+                        <Badge className="bg-yellow-500/10 text-yellow-400">
+                          ★ {dish.rating}
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                   <p className="text-white/70 mb-3">{dish.description}</p>
                   {dish.chef && (
@@ -179,6 +180,24 @@ export function HomePage() {
                         className="w-6 h-6 rounded-full object-cover"
                       />
                       <span className="text-white/60 text-sm">by {dish.chef.name}</span>
+                    </div>
+                  )}
+                  {dish.rating && (
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="flex items-center">
+                        {[...Array(5)].map((_, i) => (
+                          <Star
+                            key={i}
+                            className={`w-4 h-4 ${
+                              i < Math.floor(dish.rating)
+                                ? 'text-yellow-400'
+                                : 'text-gray-400'
+                            }`}
+                            fill={i < Math.floor(dish.rating) ? 'currentColor' : 'none'}
+                          />
+                        ))}
+                      </div>
+                      <span className="text-white/70 text-sm">({dish.rating})</span>
                     </div>
                   )}
                   <Button 
@@ -201,7 +220,7 @@ export function HomePage() {
         {/* Highest Rated / Top Rated */}
         <div className="mb-12">
           <h3 className="text-xl font-semibold text-white mb-6">
-            {recommendations?.type === 'personalized' ? 'Your Highest Rated' : 'Top Rated'}
+            {recommendations?.type === 'personalized' ? 'Your Highest Rated' : 'Top Rated Dishes'}
           </h3>
           <div className="grid md:grid-cols-3 gap-8">
             {loading ? (
@@ -286,8 +305,18 @@ export function HomePage() {
             featuredChefs.map((chef) => (
               <Card key={chef.employee_id} className="overflow-hidden hover:shadow-lg hover:shadow-[#00ff88]/20 transition-all bg-[#1a2a3a] border-[#00ff88]/20">
                 <div className="p-6 text-center">
-                  <div className="w-20 h-20 bg-[#00ff88]/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <ChefHat className="w-10 h-10 text-[#00ff88]" />
+                  <div className="w-20 h-20 rounded-full mx-auto mb-4 overflow-hidden">
+                    {chef.profile_image_url ? (
+                      <ImageWithFallback
+                        src={chef.profile_image_url}
+                        alt={chef.name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-[#00ff88]/10 flex items-center justify-center">
+                        <ChefHat className="w-10 h-10 text-[#00ff88]" />
+                      </div>
+                    )}
                   </div>
                   <h3 className="text-xl font-semibold mb-2 text-white">{chef.name}</h3>
                   <div className="flex items-center justify-center gap-4 mb-4">
@@ -320,9 +349,9 @@ export function HomePage() {
       {/* Recent Orders Section */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="text-center mb-12">
-          <h2 className="mb-4 text-white">Your Recent <span className="text-[#00ff88]">Orders</span></h2>
+          <h2 className="mb-4 text-white">{isAuthenticated() ? 'Your Recent' : 'Recent'} <span className="text-[#00ff88]">Orders</span></h2>
           <p className="text-white/70 max-w-2xl mx-auto">
-            Track your order history and see your recent purchases
+            {isAuthenticated() ? 'Track your order history and see your recent purchases' : 'See what our customers are ordering'}
           </p>
         </div>
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -356,7 +385,9 @@ export function HomePage() {
                   </div>
                   <div>
                     <h4 className="text-white font-medium">Order #{order.order_id}</h4>
-                    <p className="text-white/70 text-sm">Your Order</p>
+                    <p className="text-white/70 text-sm">
+                      {isAuthenticated() ? 'Your Order' : order.customer_name}
+                    </p>
                   </div>
                 </div>
                 <div className="flex justify-between items-center text-sm">
@@ -374,7 +405,12 @@ export function HomePage() {
             // Fallback when no orders
             <div className="col-span-3 text-center py-8">
               <ShoppingBag className="w-16 h-16 text-[#00ff88]/50 mx-auto mb-4" />
-              <p className="text-white/70">Your recent orders will appear here once you place them!</p>
+              <p className="text-white/70">
+                {isAuthenticated() 
+                  ? 'Your recent orders will appear here once you place them!' 
+                  : 'No recent orders to display at the moment.'
+                }
+              </p>
             </div>
           )}
         </div>
@@ -443,7 +479,7 @@ export function HomePage() {
             </div>
             <h3 className="mb-2 text-white">Contact Us</h3>
             <p className="text-white/70">(555) 123-4567</p>
-            <p className="text-white/70">info@byteandbite.com</p>
+            <p className="text-white/70">manager@byteandbite.com</p>
           </Card>
         </div>
       </section>

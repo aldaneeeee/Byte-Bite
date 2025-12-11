@@ -14,7 +14,8 @@ import { api } from '../utils/api';
 import { 
   Users, ChefHat, Truck, Crown, Edit, Trash2, Plus, X, Search, 
   DollarSign, Clock, Gavel, FileText, ArrowUpRight, ArrowDownLeft,
-  Brain, Star, MessageSquare // 新增图标
+  Brain, Star, MessageSquare, // 新增图标
+  Flag
 } from 'lucide-react';
 
 // Interfaces
@@ -25,6 +26,8 @@ interface Employee {
   role: string;
   status: string;
   reputation_score: number;
+  complaint_count: number;
+  demotion_count: number;
 }
 
 interface Customer {
@@ -76,6 +79,45 @@ interface KBEntry {
   avg_rating: number;
   rating_count: number;
   created_at: string;
+<<<<<<< Updated upstream
+=======
+}
+
+interface ForumReport {
+    report_id: number;
+    reporter_name: string;
+    content_type: 'post' | 'comment';
+    content_info: {
+        title?: string;
+        content: string;
+        author: string;
+    };
+    reason: string;
+    status: 'pending' | 'reviewed' | 'resolved' | 'notified' | 'appealed' | 'repealed' | 'upheld';
+    created_at: string;
+    reviewed_at?: string;
+    reviewed_by?: string;
+    appealed_at?: string;
+    appeal_message?: string;
+}
+
+interface Complaint {
+    complaint_id: number;
+    complainant_name: string;
+    complainant_type: string;
+    accused_name: string;
+    accused_type: string;
+    complaint_type: string;
+    category: string;
+    description: string;
+    related_order_id?: number;
+    status: string;
+    created_at: string;
+    reviewed_at?: string;
+    dispute_reason?: string;
+    appeal_message?: string;
+    appealed_at?: string;
+>>>>>>> Stashed changes
 }
 
 export function ManagerDashboard() {
@@ -83,6 +125,11 @@ export function ManagerDashboard() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [biddings, setBiddings] = useState<BiddingSession[]>([]);
   const [financialLogs, setFinancialLogs] = useState<FinancialLog[]>([]);
+<<<<<<< Updated upstream
+=======
+  const [forumReports, setForumReports] = useState<ForumReport[]>([]);
+  const [complaints, setComplaints] = useState<Complaint[]>([]);
+>>>>>>> Stashed changes
   const [deliveryStaff, setDeliveryStaff] = useState<Employee[]>([]);
   
   // 👇👇👇 新增 KB State 👇👇👇
@@ -135,22 +182,59 @@ export function ManagerDashboard() {
     try {
       setLoading(true);
       // 👇👇👇 增加 getKnowledgeBase 调用 👇👇👇
+<<<<<<< Updated upstream
       const [employeesRes, customersRes, biddingsRes, financialsRes, kbRes] = await Promise.all([
+=======
+      const [employeesRes, customersRes, biddingsRes, financialsRes, kbRes, reportsRes, complaintsRes] = await Promise.allSettled([
+>>>>>>> Stashed changes
         api.getEmployees(),
         api.getAllCustomers(),
         api.getManagerBiddings(),
         api.getFinancialLogs(),
+<<<<<<< Updated upstream
         api.getKnowledgeBase() // 获取 AI 知识库
+=======
+        api.getKnowledgeBase(), // 获取 AI 知识库
+        api.getForumReports(),
+        api.getComplaints()
+        
+>>>>>>> Stashed changes
       ]);
 
       if (employeesRes.success) {
           setEmployees(employeesRes.employees);
           setDeliveryStaff(employeesRes.employees.filter((e: Employee) => e.role === 'Delivery'));
       }
+<<<<<<< Updated upstream
       if (customersRes.success) setCustomers(customersRes.customers);
       if (biddingsRes.success) setBiddings(biddingsRes.biddings);
       if (financialsRes.success) setFinancialLogs(financialsRes.logs);
       if (kbRes.success) setKbEntries(kbRes.entries); // 设置 KB 数据
+=======
+      if (customersRes.status === 'fulfilled' && customersRes.value.success) setCustomers(customersRes.value.customers);
+      else if (customersRes.status === 'rejected') console.error('Failed to load customers:', customersRes.reason);
+      if (biddingsRes.status === 'fulfilled' && biddingsRes.value.success) setBiddings(biddingsRes.value.biddings);
+      else if (biddingsRes.status === 'rejected') console.error('Failed to load biddings:', biddingsRes.reason);
+      if (financialsRes.status === 'fulfilled' && financialsRes.value.success) setFinancialLogs(financialsRes.value.logs);
+      else if (financialsRes.status === 'rejected') console.error('Failed to load financial logs:', financialsRes.reason);
+      if (reportsRes.status === 'fulfilled' && reportsRes.value.success) {
+          setForumReports(reportsRes.value.reports);
+          console.log('Loaded forum reports:', reportsRes.value.reports);
+      } else if (reportsRes.status === 'rejected') {
+          console.error('Failed to load forum reports:', reportsRes.reason);
+      }
+      if (complaintsRes.status === 'fulfilled' && complaintsRes.value.success) {
+          setComplaints(complaintsRes.value.complaints);
+          console.log('Loaded complaints:', complaintsRes.value.complaints);
+      } else if (complaintsRes.status === 'rejected') {
+          console.error('Failed to load complaints:', complaintsRes.reason);
+      }
+      if (kbRes.status === 'fulfilled' && kbRes.value.success) {
+          setKbEntries(kbRes.value.entries);
+      } else if (kbRes.status === 'rejected') {
+          console.error('Failed to load knowledge base:', kbRes.reason);
+      }
+>>>>>>> Stashed changes
       
     } catch (err) {
       setError('Failed to load data');
@@ -181,6 +265,24 @@ export function ManagerDashboard() {
       setError("Error connecting to server");
     } finally {
       setLoadingKB(false);
+    }
+  };
+
+  const handleDeleteKB = async (kbId: number) => {
+    if (!confirm('Are you sure you want to delete this knowledge entry? This action cannot be undone.')) return;
+
+    try {
+      const res = await api.deleteKnowledgeEntry(kbId);
+      if (res.success) {
+        setSuccess("Knowledge entry deleted successfully!");
+        // 刷新 KB 列表
+        const kbRes = await api.getKnowledgeBase();
+        if(kbRes.success) setKbEntries(kbRes.entries);
+      } else {
+        setError("Failed to delete entry");
+      }
+    } catch (e) {
+      setError("Error connecting to server");
     }
   };
 
@@ -266,6 +368,104 @@ export function ManagerDashboard() {
       } 
   };
 
+<<<<<<< Updated upstream
+=======
+  // Toggle VIP status
+  const handleToggleVIP = async (customerId: number, promote: boolean) => {
+    try {
+      const res = await api.updateCustomerVIP(customerId, promote); // API call to promote/demote VIP
+      if (res.success) {
+        setSuccess(promote ? "Customer promoted to VIP!" : "VIP removed!");
+        loadData(); // refresh customers
+      } else {
+        setError(res.message || "Failed to update VIP status");
+      }
+    } catch (e) {
+      setError("Error updating VIP status");
+    }
+  };
+
+  // Add a warning to the customer
+  const handleAddWarning = async (customerId: number) => {
+    try {
+      const res = await api.addCustomerWarning(customerId); // API call to add warning
+      if (res.success) {
+        setSuccess("Warning added to customer");
+        loadData(); // refresh customers
+      } else {
+        setError(res.message || "Failed to add warning");
+      }
+    } catch (e) {
+      setError("Error adding warning");
+    }
+  };
+
+  const handleUpdateReportStatus = async (reportId: number, status: string) => {
+      try {
+          const res = await api.updateReportStatus(reportId, status);
+          if(res.success) {
+              loadData();
+              setSuccess(`Report ${status}`);
+          }
+      } catch(e) { setError('Failed to update report status'); }
+  };
+
+  const handleNotifyAccused = async (complaintId: number) => {
+      try {
+          // First notify the accused party
+          const notifyRes = await api.notifyComplaintAccused(complaintId);
+          if(notifyRes.success) {
+              // Then update complaint status to notified
+              const updateRes = await api.updateComplaintStatus(complaintId, 'notified');
+              if(updateRes.success) {
+                  loadData();
+                  setSuccess('Accused party notified about the complaint');
+              } else {
+                  setError('Failed to update complaint status');
+              }
+          } else {
+              setError(notifyRes.message || 'Failed to notify accused party');
+          }
+      } catch(e) { setError('Failed to notify accused party'); }
+  };
+
+  const handleReviewComplaint = async (complaintId: number, decision: string) => {
+      try {
+          const res = await api.reviewComplaint(complaintId.toString(), { decision, manager_decision: 'Reviewed by manager' });
+          if(res.success) {
+              loadData();
+              setSuccess(`Complaint ${decision}`);
+          } else {
+              setError(res.message || 'Failed to review complaint');
+          }
+      } catch(e) { setError('Failed to review complaint'); }
+  };
+
+  const handleReviewAppeal = async (complaintId: number, decision: string) => {
+      try {
+          const res = await api.reviewAppeal(complaintId, { decision, review_notes: `Appeal ${decision} by manager` });
+          if(res.success) {
+              loadData();
+              setSuccess(`Appeal ${decision}`);
+          } else {
+              setError(res.message || 'Failed to review appeal');
+          }
+      } catch(e) { setError('Failed to review appeal'); }
+  };
+
+  const handleReviewForumAppeal = async (reportId: number, decision: string) => {
+      try {
+          const res = await api.reviewForumAppeal(reportId, { decision });
+          if(res.success) {
+              loadData();
+              setSuccess(`Forum appeal ${decision}ed`);
+          } else {
+              setError(res.message || 'Failed to review forum appeal');
+          }
+      } catch(e) { setError('Failed to review forum appeal'); }
+  };
+
+>>>>>>> Stashed changes
   const handleOpenAssign = (b: BiddingSession) => { setSelectedBidding(b); setAssignForm({ employee_id: '', memo: '' }); setAssignModalOpen(true); };
   
   const handleAssignSubmit = async (e: React.FormEvent) => { 
@@ -351,6 +551,12 @@ export function ManagerDashboard() {
             {/* 👇👇👇 新增 Tab: AI Brain 👇👇👇 */}
             <TabsTrigger value="ai-brain" className="flex-1 data-[state=active]:bg-[#00ff88] data-[state=active]:text-[#0a1628]">
                <Brain className="w-4 h-4 mr-2"/> AI Knowledge Base
+<<<<<<< Updated upstream
+=======
+            </TabsTrigger>
+            <TabsTrigger value="reports" className="flex-1 data-[state=active]:bg-[#00ff88] data-[state=active]:text-[#0a1628]">
+               <Flag className="w-4 h-4 mr-2"/> Reports
+>>>>>>> Stashed changes
             </TabsTrigger>
           </TabsList>
 
@@ -464,33 +670,49 @@ export function ManagerDashboard() {
                 <Table>
                     <TableHeader>
                         <TableRow className="border-[#00ff88]/20">
-                            <TableHead className="text-white h-12 align-middle w-1/4">Name</TableHead>
+                            <TableHead className="text-white h-12 align-middle w-1/5">Name</TableHead>
                             <TableHead className="text-white h-12 align-middle w-1/6">Role</TableHead>
                             <TableHead className="text-white h-12 align-middle w-1/6">Status</TableHead>
                             <TableHead className="text-white h-12 align-middle w-1/6">Reputation</TableHead>
-                            <TableHead className="text-white h-12 align-middle w-1/4 text-right">Actions</TableHead>
+                            <TableHead className="text-white h-12 align-middle w-1/6">Complaints</TableHead>
+                            <TableHead className="text-white h-12 align-middle w-1/6">Demotions</TableHead>
+                            <TableHead className="text-white h-12 align-middle w-1/6 text-right">Actions</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>{employees.map(e => (
                         <TableRow key={e.id} className="border-[#00ff88]/10 h-16">
-                            <TableCell className="align-middle text-white">
+                            <TableCell className="align-middle text-white w-1/5">
                                 <div>
                                     <span className="font-medium">{e.name}</span>
                                     <div className="text-xs text-white/50">{e.email}</div>
                                 </div>
                             </TableCell>
-                            <TableCell className="align-middle text-white">
+                            <TableCell className="align-middle text-white w-1/6">
                                 <div className="flex items-center gap-2">
                                     {getRoleIcon(e.role)} {e.role}
                                 </div>
                             </TableCell>
-                            <TableCell className="align-middle">
+                            <TableCell className="align-middle w-1/6">
                                 <div>{getStatusBadge(e.status)}</div>
                             </TableCell>
-                            <TableCell className="align-middle text-white">
+                            <TableCell className="align-middle text-white w-1/6">
                                 <div>{e.reputation_score}/5.0</div>
                             </TableCell>
-                            <TableCell className="align-middle">
+                            <TableCell className="align-middle text-white w-1/6">
+                                <div className="text-center">
+                                    <Badge className={e.complaint_count >= 2 ? 'bg-red-500 text-white' : e.complaint_count >= 1 ? 'bg-yellow-500 text-white' : 'bg-green-500 text-white'}>
+                                        {e.complaint_count}/3
+                                    </Badge>
+                                </div>
+                            </TableCell>
+                            <TableCell className="align-middle text-white w-1/6">
+                                <div className="text-center">
+                                    <Badge className={e.demotion_count >= 1 ? 'bg-red-500 text-white' : 'bg-gray-500 text-white'}>
+                                        {e.demotion_count}/2
+                                    </Badge>
+                                </div>
+                            </TableCell>
+                            <TableCell className="align-middle w-1/6">
                                 <div className="flex justify-end gap-2 items-center">
                                     <Button size="sm" variant="outline" onClick={() => openEditEmployee(e)}><Edit className="w-4 h-4"/></Button>
                                     {e.status === 'Active' ? 
@@ -546,9 +768,27 @@ export function ManagerDashboard() {
                             </TableCell>
                             <TableCell className="align-middle">
                                 <div className="flex justify-end gap-2 items-center">
-                                    <Button size="sm" onClick={() => openEditCustomer(c)}>Modify</Button>
-                                    <Button size="sm" variant="outline" className="text-red-400" onClick={() => handleDeleteCustomer(c.id)}><Trash2 className="w-4 h-4"/></Button>
+                                  <Button size="sm" onClick={() => openEditCustomer(c)}>Modify</Button>
+
+                                  {c.is_vip ? (
+                                    <Button size="sm" variant="outline" className="text-yellow-400" onClick={() => handleToggleVIP(c.id, false)}>
+                                      Remove VIP
+                                    </Button>
+                                  ) : (
+                                    <Button size="sm" variant="outline" className="text-yellow-400" onClick={() => handleToggleVIP(c.id, true)}>
+                                      Promote VIP
+                                    </Button>
+                                  )}
+
+                                  <Button size="sm" variant="outline" className="text-orange-400" onClick={() => handleAddWarning(c.id)}>
+                                    ⚠️ Warning
+                                  </Button>
+
+                                  <Button size="sm" variant="outline" className="text-red-400" onClick={() => handleDeleteCustomer(c.id)}>
+                                    <Trash2 className="w-4 h-4"/>
+                                  </Button>
                                 </div>
+                                
                             </TableCell>
                         </TableRow>
                     ))}</TableBody>
@@ -627,7 +867,7 @@ export function ManagerDashboard() {
                                 </div>
 
                                 {/* Rating Badge */}
-                                <div className="flex flex-col items-end shrink-0">
+                                <div className="flex flex-col items-end shrink-0 gap-2">
                                     <div className={`flex items-center gap-1 px-3 py-1 rounded-full border ${
                                         entry.avg_rating >= 4.0 ? 'bg-green-500/10 border-green-500/30 text-green-400' :
                                         entry.avg_rating >= 3.0 ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400' :
@@ -636,7 +876,17 @@ export function ManagerDashboard() {
                                         <Star className="w-3 h-3 fill-current" />
                                         <span className="font-bold">{entry.avg_rating.toFixed(1)}</span>
                                     </div>
-                                    <span className="text-white/30 text-xs mt-1">{entry.rating_count} ratings</span>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-white/30 text-xs">{entry.rating_count} ratings</span>
+                                        <Button
+                                            onClick={() => handleDeleteKB(entry.id)}
+                                            size="sm"
+                                            variant="ghost"
+                                            className="h-6 w-6 p-0 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                                        >
+                                            <Trash2 className="w-3 h-3" />
+                                        </Button>
+                                    </div>
                                 </div>
                             </div>
                         </Card>
@@ -650,6 +900,159 @@ export function ManagerDashboard() {
                     )}
                 </div>
             </div>
+<<<<<<< Updated upstream
+=======
+            </TabsContent>
+          {/* Tab: Reports */}
+          <TabsContent value="reports">
+            <div className="space-y-6">
+              {/* Forum Reports */}
+              <Card className="bg-[#0f1f3a] border-[#00ff88]/20 p-6">
+                <div className="flex justify-between mb-4">
+                  <h2 className="text-xl font-semibold">Forum Reports</h2>
+                </div>
+                <Table>
+                    <TableHeader>
+                        <TableRow className="border-[#00ff88]/20">
+                            <TableHead className="text-white h-12 align-middle w-1/7">Report Details</TableHead>
+                            <TableHead className="text-white h-12 align-middle w-1/7">Content</TableHead>
+                            <TableHead className="text-white h-12 align-middle w-1/7">Reporter</TableHead>
+                            <TableHead className="text-white h-12 align-middle w-1/7">Accused</TableHead>
+                            <TableHead className="text-white h-12 align-middle w-1/7">Status</TableHead>
+                            <TableHead className="text-white h-12 align-middle w-1/7">Appeal Message</TableHead>
+                            <TableHead className="text-white h-12 align-middle w-1/7 text-right">Actions</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>{forumReports && forumReports.length > 0 ? forumReports.map(r => (
+                        <TableRow key={r.report_id} className="border-[#00ff88]/10 h-16">
+                            <TableCell className="align-middle text-white">
+                                <div>
+                                    <div className="font-medium">Report #{r.report_id}</div>
+                                    <div className="text-xs text-white/50">{new Date(r.created_at).toLocaleDateString()}</div>
+                                    <div className="text-xs text-white/70 mt-1">{r.reason}</div>
+                                </div>
+                            </TableCell>
+                            <TableCell className="align-middle text-white text-sm">
+                                <div>
+                                    <div className="font-medium">{r.content_type === 'post' ? 'Post' : 'Comment'}</div>
+                                    <div className="text-xs text-white/50 truncate max-w-32">{r.content_info?.content?.substring(0, 50) || 'N/A'}...</div>
+                                </div>
+                            </TableCell>
+                            <TableCell className="align-middle text-white">
+                                <div className="text-sm">{r.reporter_name || 'Unknown'}</div>
+                            </TableCell>
+                            <TableCell className="align-middle text-white">
+                                <div className="text-sm">{r.content_info?.author || 'Unknown'}</div>
+                            </TableCell>
+                            <TableCell className="align-middle">
+                                <Badge className={r.status === 'pending' ? 'bg-yellow-500 text-white' : r.status === 'resolved' ? 'bg-green-500 text-white' : r.status === 'notified' ? 'bg-blue-500 text-white' : r.status === 'appealed' ? 'bg-purple-500 text-white' : r.status === 'repealed' ? 'bg-orange-500 text-white' : r.status === 'upheld' ? 'bg-red-500 text-white' : 'bg-gray-500 text-white'}>
+                                    {r.status ? r.status.charAt(0).toUpperCase() + r.status.slice(1) : 'Unknown'}
+                                </Badge>
+                            </TableCell>
+                            <TableCell className="align-middle text-white text-sm">
+                                {r.appeal_message || '-'}
+                            </TableCell>
+                            <TableCell className="align-middle">
+                                <div className="flex justify-end gap-2 items-center">
+                                    {r.status === 'pending' && (
+                                        <>
+                                            <Button size="sm" onClick={() => handleUpdateReportStatus(r.report_id, 'notified')} className="bg-blue-500 hover:bg-blue-600 text-white">Notify Accused</Button>
+                                            <Button size="sm" variant="outline" className="text-red-400" onClick={() => handleUpdateReportStatus(r.report_id, 'reviewed')}>Dismiss</Button>
+                                        </>
+                                    )}
+                                    {r.status === 'appealed' && (
+                                        <>
+                                            <Button size="sm" onClick={() => handleReviewForumAppeal(r.report_id, 'repeal')} className="bg-green-500 hover:bg-green-600 text-white">Repeal</Button>
+                                            <Button size="sm" variant="outline" className="text-red-400" onClick={() => handleReviewForumAppeal(r.report_id, 'uphold')}>Uphold</Button>
+                                        </>
+                                    )}
+                                </div>
+                            </TableCell>
+                        </TableRow>
+                    )) : (
+                        <TableRow>
+                            <TableCell colSpan={7} className="text-center text-white/50 py-8">
+                                {forumReports ? 'No forum reports found' : 'Loading forum reports...'}
+                            </TableCell>
+                        </TableRow>
+                    )}</TableBody>
+                </Table>
+              </Card>
+
+              {/* Complaints */}
+              <Card className="bg-[#0f1f3a] border-[#00ff88]/20 p-6">
+                <div className="flex justify-between mb-4">
+                  <h2 className="text-xl font-semibold">Complaints & Compliments</h2>
+                </div>
+                <Table>
+                    <TableHeader>
+                        <TableRow className="border-[#00ff88]/20">
+                            <TableHead className="text-white h-12 align-middle w-1/7">Complaint Details</TableHead>
+                            <TableHead className="text-white h-12 align-middle w-1/7">Description</TableHead>
+                            <TableHead className="text-white h-12 align-middle w-1/7">Filed By</TableHead>
+                            <TableHead className="text-white h-12 align-middle w-1/7">Accused</TableHead>
+                            <TableHead className="text-white h-12 align-middle w-1/7">Status</TableHead>
+                            <TableHead className="text-white h-12 align-middle w-1/7">Appeal Message</TableHead>
+                            <TableHead className="text-white h-12 align-middle w-1/7 text-right">Actions</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>{complaints && complaints.length > 0 ? complaints.filter(c => c.complaint_type === 'complaint').map(c => (
+                        <TableRow key={c.complaint_id} className="border-[#00ff88]/10 h-16">
+                            <TableCell className="align-middle text-white">
+                                <div>
+                                    <div className="font-medium">#{c.complaint_id} - {c.complaint_type}</div>
+                                    <div className="text-xs text-white/50">{new Date(c.created_at).toLocaleDateString()}</div>
+                                    <div className="text-xs text-white/70 mt-1">Category: {c.category}</div>
+                                    {c.related_order_id && <div className="text-xs text-white/70">Order: #{c.related_order_id}</div>}
+                                </div>
+                            </TableCell>
+                            <TableCell className="align-middle text-white text-sm">
+                                <div className="truncate max-w-48">{c.description}</div>
+                            </TableCell>
+                            <TableCell className="align-middle text-white">
+                                <div className="text-sm">{c.complainant_name}</div>
+                                <div className="text-xs text-white/50">({c.complainant_type})</div>
+                            </TableCell>
+                            <TableCell className="align-middle text-white">
+                                <div className="text-sm">{c.accused_name}</div>
+                                <div className="text-xs text-white/50">({c.accused_type})</div>
+                            </TableCell>
+                            <TableCell className="align-middle">
+                                <Badge className={c.status === 'pending' ? 'bg-yellow-500 text-white' : c.status === 'upheld' ? 'bg-green-500 text-white' : c.status === 'dismissed' ? 'bg-red-500 text-white' : c.status === 'disputed' ? 'bg-orange-500 text-white' : c.status === 'appealed' ? 'bg-purple-500 text-white' : 'bg-gray-500 text-white'}>
+                                    {c.status.replace('_', ' ')}
+                                </Badge>
+                            </TableCell>
+                            <TableCell className="align-middle text-white text-sm">
+                                {c.appeal_message || '-'}
+                            </TableCell>
+                            <TableCell className="align-middle">
+                                <div className="flex justify-end gap-2 items-center">
+                                    {c.status === 'pending' && (
+                                        <>
+                                            <Button size="sm" onClick={() => handleNotifyAccused(c.complaint_id)} className="bg-blue-500 hover:bg-blue-600 text-white">Notify Accused</Button>
+                                            <Button size="sm" variant="outline" className="text-red-400" onClick={() => handleReviewComplaint(c.complaint_id, 'dismissed')}>Dismiss</Button>
+                                        </>
+                                    )}
+                                    {c.status === 'appealed' && (
+                                        <>
+                                            <Button size="sm" onClick={() => handleReviewAppeal(c.complaint_id, 'repeal')} className="bg-green-500 hover:bg-green-600 text-white">Repeal</Button>
+                                            <Button size="sm" variant="outline" className="text-red-400" onClick={() => handleReviewAppeal(c.complaint_id, 'uphold')}>Uphold</Button>
+                                        </>
+                                    )}
+                                </div>
+                            </TableCell>
+                        </TableRow>
+                    )) : (
+                        <TableRow>
+                            <TableCell colSpan={7} className="text-center text-white/50 py-8">
+                                {complaints ? 'No complaints found' : 'Loading complaints...'}
+                            </TableCell>
+                        </TableRow>
+                    )}</TableBody>
+                </Table>
+              </Card>
+            </div>
+>>>>>>> Stashed changes
           </TabsContent>
 
         </Tabs>

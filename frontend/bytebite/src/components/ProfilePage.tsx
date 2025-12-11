@@ -30,6 +30,9 @@ export function ProfilePage() {
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
+    username: '',
+    email: '',
+    phone_number: '',
     deposited_cash: 0,
   });
   const [saving, setSaving] = useState(false);
@@ -62,6 +65,9 @@ export function ProfilePage() {
       if (profileRes.success && profileRes.user) {
         setProfile(profileRes.user);
         setFormData({
+          username: profileRes.user.username || '',
+          email: profileRes.user.email || '',
+          phone_number: profileRes.user.phone_number || '',
           deposited_cash: profileRes.user.deposited_cash || 0,
         });
       }
@@ -122,7 +128,6 @@ export function ProfilePage() {
   };
 
   const handleOrderClick = (orderId: number) => {
-    console.log('ProfilePage: Order clicked with orderId:', orderId);
     setSelectedOrderId(orderId);
     setOrderModalOpen(true);
   };
@@ -209,24 +214,57 @@ export function ProfilePage() {
 
             <div className="space-y-6">
               <div>
-                <Label className="text-white/70 text-sm">Username</Label>
-                <div className="mt-2 p-3 bg-[#0a1628] rounded-lg border border-[#00ff88]/10">
-                  <p className="text-white font-medium">{profile.username}</p>
-                </div>
+                <Label htmlFor="username" className="text-white/70 text-sm">Username</Label>
+                {isEditing ? (
+                  <Input
+                    id="username"
+                    name="username"
+                    type="text"
+                    value={formData.username}
+                    onChange={handleInputChange}
+                    className="mt-2 bg-[#0a1628] border-[#00ff88]/30 text-white focus:border-[#00ff88]"
+                  />
+                ) : (
+                  <div className="mt-2 p-3 bg-[#0a1628] rounded-lg border border-[#00ff88]/10">
+                    <p className="text-white font-medium">{profile.username}</p>
+                  </div>
+                )}
               </div>
 
               <div>
-                <Label className="text-white/70 text-sm">Phone Number</Label>
-                <div className="mt-2 p-3 bg-[#0a1628] rounded-lg border border-[#00ff88]/10">
-                  <p className="text-white font-medium">{profile.phone_number}</p>
-                </div>
+                <Label htmlFor="phone_number" className="text-white/70 text-sm">Phone Number</Label>
+                {isEditing ? (
+                  <Input
+                    id="phone_number"
+                    name="phone_number"
+                    type="tel"
+                    value={formData.phone_number}
+                    onChange={handleInputChange}
+                    className="mt-2 bg-[#0a1628] border-[#00ff88]/30 text-white focus:border-[#00ff88]"
+                  />
+                ) : (
+                  <div className="mt-2 p-3 bg-[#0a1628] rounded-lg border border-[#00ff88]/10">
+                    <p className="text-white font-medium">{profile.phone_number}</p>
+                  </div>
+                )}
               </div>
 
               <div>
-                <Label className="text-white/70 text-sm">Email Address</Label>
-                <div className="mt-2 p-3 bg-[#0a1628] rounded-lg border border-[#00ff88]/10">
-                  <p className="text-white font-medium">{profile.email}</p>
-                </div>
+                <Label htmlFor="email" className="text-white/70 text-sm">Email Address</Label>
+                {isEditing ? (
+                  <Input
+                    id="email"
+                    name="email"
+                    type="email"
+                    value={formData.email}
+                    onChange={handleInputChange}
+                    className="mt-2 bg-[#0a1628] border-[#00ff88]/30 text-white focus:border-[#00ff88]"
+                  />
+                ) : (
+                  <div className="mt-2 p-3 bg-[#0a1628] rounded-lg border border-[#00ff88]/10">
+                    <p className="text-white font-medium">{profile.email}</p>
+                  </div>
+                )}
               </div>
 
               <Separator className="bg-[#00ff88]/20" />
@@ -249,6 +287,29 @@ export function ProfilePage() {
                 <Label className="text-white/70 text-sm">Total Orders</Label>
                 <div className="mt-2 p-3 bg-[#0a1628] rounded-lg border border-[#00ff88]/10">
                   <p className="text-[#00ff88] font-bold text-lg">{profile.order_count ?? 0}</p>
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-white/70 text-sm">VIP Status</Label>
+                <div className="mt-2 p-3 bg-[#0a1628] rounded-lg border border-[#00ff88]/10">
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">{profile.is_vip ? '⭐' : '☆'}</span>
+                    <p className={`font-bold text-lg ${profile.is_vip ? 'text-yellow-500' : 'text-gray-400'}`}>
+                      {profile.is_vip ? 'VIP Member' : 'Regular Member'}
+                    </p>
+                  </div>
+                  {profile.is_vip && (
+                    <div className="text-yellow-400/70 text-sm mt-1">
+                      <p>Enjoy exclusive benefits and priority service</p>
+                      <p>Order count: {profile.order_count || 0} | Next free delivery: {((profile.order_count || 0) % 3) + 1} more orders</p>
+                    </div>
+                  )}
+                  {!profile.is_vip && (
+                    <p className="text-gray-400 text-sm mt-1">
+                      Make 3 orders or deposit $100+ to become VIP
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
