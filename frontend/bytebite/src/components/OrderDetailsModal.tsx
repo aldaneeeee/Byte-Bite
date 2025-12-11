@@ -38,6 +38,18 @@ export function OrderDetailsModal({ orderId, isOpen, onClose }: OrderDetailsModa
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
     if (orderId && isOpen) {
       loadOrderDetails();
     }
@@ -76,11 +88,19 @@ export function OrderDetailsModal({ orderId, isOpen, onClose }: OrderDetailsModa
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-[9999]">
-      <div className="bg-[#0f1f3a] border border-[#00ff88]/20 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 relative">
+    <div 
+      className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-[9999]"
+      style={{ backgroundColor: 'rgba(0, 0, 0, 0.7)', zIndex: 9999 }}
+      onClick={onClose}
+    >
+      <div 
+        className="bg-[#0f1f3a] border border-[#00ff88]/20 rounded-lg max-w-md w-full h-[40vh] overflow-y-auto p-4 relative"
+        style={{ backgroundColor: '#0f1f3a' }}
+        onClick={(e) => e.stopPropagation()}
+      >
         <button 
           onClick={onClose}
-          className="absolute top-4 right-4 text-white/50 hover:text-white text-2xl leading-none"
+          className="absolute top-2 right-2 text-white/50 hover:text-white text-xl leading-none"
         >
           &times;
         </button>
@@ -142,7 +162,7 @@ export function OrderDetailsModal({ orderId, isOpen, onClose }: OrderDetailsModa
             <div className="space-y-4">
               {orderDetails.items.map((item, idx) => (
                 <div key={idx} className="flex gap-4 bg-[#1a2f4a] p-4 rounded-lg border border-[#00ff88]/10">
-                  <img src={item.image} alt={item.name} className="w-20 h-20 object-cover rounded-md bg-black/20" />
+                  <img src={item.image} alt={item.name} className="w-12 h-12 object-cover rounded-md bg-black/20" />
                   <div className="flex-1">
                     <div className="flex justify-between">
                       <h4 className="text-white font-medium">{item.name}</h4>
@@ -161,6 +181,7 @@ export function OrderDetailsModal({ orderId, isOpen, onClose }: OrderDetailsModa
             </div>
           </div>
         )}
+
       </div>
     </div>
   );

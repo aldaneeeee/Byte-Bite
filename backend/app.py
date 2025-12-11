@@ -3,11 +3,18 @@ import time
 from google.api_core import exceptions as google_exceptions
 import os
 from dotenv import load_dotenv
-import google.generativeai as genai
+try:
+    import google.generativeai as genai
+    GOOGLE_AVAILABLE = True
+except Exception:
+    genai = None
+    GOOGLE_AVAILABLE = False
 import PIL.Image
 import sqlite3
+import json
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, g
 from flask_cors import CORS
+from sqlalchemy.exc import IntegrityError
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timedelta, timezone 
 import jwt
@@ -87,12 +94,16 @@ class Employees(db.Model):
     reputation_score = db.Column(db.Numeric(3, 2), default=5.00)
     profile_image_url = db.Column(db.String(255))
     created_at = db.Column(db.DateTime)
+    demotion_count = db.Column(db.Integer, default=0)
+    complaint_count = db.Column(db.Integer, default=0)
+    compliment_count = db.Column(db.Integer, default=0)
 
 class VIP_Customers(db.Model):
     __tablename__ = 'VIP_Customers'
     customer_id = db.Column(db.Integer, db.ForeignKey('Customers.customer_id'), primary_key=True)
     vip_start_date = db.Column(db.Date)
     free_deliveries_remaining = db.Column(db.Integer, default=0)
+    order_count = db.Column(db.Integer, default=0)
 
 class Orders(db.Model):
     __tablename__ = 'Orders'
@@ -103,6 +114,7 @@ class Orders(db.Model):
     status = db.Column(db.String(20), default='Pending')
     total_price = db.Column(db.Numeric(10, 2), nullable=False)
     vip_discount = db.Column(db.Numeric(10, 2), default=0.00)
+    delivery_fee = db.Column(db.Numeric(10, 2), default=5.00)
     order_time = db.Column(db.DateTime, default=utc_now)
     completion_time = db.Column(db.DateTime)
 
@@ -166,7 +178,7 @@ class AI_Ratings(db.Model):
     __tablename__ = 'AI_Ratings'
     rating_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     kb_id = db.Column(db.Integer, db.ForeignKey('AI_Knowledge_Base.kb_id'), nullable=False)
-    customer_id = db.Column(db.Integer, db.ForeignKey('Customers.customer_id'), nullable=False)
+    customer_id = db.Column(db.Integer, db.ForeignKey('Customers.customer_id'), nullable=True)
     rating = db.Column(db.Integer)
     helpful_score = db.Column(db.Integer)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -180,14 +192,25 @@ class Financial_Log(db.Model):
     amount = db.Column(db.Numeric(10, 2), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+<<<<<<< Updated upstream
+=======
+# Forum models
+>>>>>>> Stashed changes
 class Forum_Posts(db.Model):
     __tablename__ = 'Forum_Posts'
     post_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     customer_id = db.Column(db.Integer, db.ForeignKey('Customers.customer_id'), nullable=False)
     title = db.Column(db.String(200), nullable=False)
     content = db.Column(db.Text, nullable=False)
+<<<<<<< Updated upstream
     category = db.Column(db.String(50), default='general')
     created_at = db.Column(db.DateTime, default=utc_now)
+=======
+    category = db.Column(db.String(50), nullable=False)
+    likes = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=utc_now)
+    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
+>>>>>>> Stashed changes
 
 class Forum_Comments(db.Model):
     __tablename__ = 'Forum_Comments'
@@ -202,6 +225,71 @@ class Forum_Likes(db.Model):
     like_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     post_id = db.Column(db.Integer, db.ForeignKey('Forum_Posts.post_id'), nullable=False)
     customer_id = db.Column(db.Integer, db.ForeignKey('Customers.customer_id'), nullable=False)
+<<<<<<< Updated upstream
+=======
+class Forum_Comment_Likes(db.Model):
+    __tablename__ = 'Forum_Comment_Likes'
+    like_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    comment_id = db.Column(db.Integer, db.ForeignKey('Forum_Comments.comment_id'), nullable=False)
+    customer_id = db.Column(db.Integer, db.ForeignKey('Customers.customer_id'), nullable=False)
+class Forum_Post_Compliments(db.Model):
+    __tablename__ = 'Forum_Post_Compliments'
+    compliment_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    post_id = db.Column(db.Integer, db.ForeignKey('Forum_Posts.post_id'), nullable=False)
+    customer_id = db.Column(db.Integer, db.ForeignKey('Customers.customer_id'), nullable=False)
+class Forum_Comment_Compliments(db.Model):
+    __tablename__ = 'Forum_Comment_Compliments'
+    compliment_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    comment_id = db.Column(db.Integer, db.ForeignKey('Forum_Comments.comment_id'), nullable=False)
+    customer_id = db.Column(db.Integer, db.ForeignKey('Customers.customer_id'), nullable=False)
+class Forum_Reports(db.Model):
+    __tablename__ = 'Forum_Reports'
+    report_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    reporter_id = db.Column(db.Integer, db.ForeignKey('Customers.customer_id'), nullable=False)
+    content_type = db.Column(db.String(20), nullable=False)  # 'post' or 'comment'
+    content_id = db.Column(db.Integer, nullable=False)  # post_id or comment_id
+    reason = db.Column(db.Text, nullable=False)
+    status = db.Column(db.String(20), default='pending')  # 'pending', 'reviewed', 'resolved', 'notified', 'appealed', 'repealed', 'upheld'
+    created_at = db.Column(db.DateTime, default=utc_now)
+    reviewed_at = db.Column(db.DateTime)
+    reviewed_by = db.Column(db.Integer, db.ForeignKey('Employees.employee_id'))
+    appealed_at = db.Column(db.DateTime)
+    appeal_message = db.Column(db.Text)
+
+class User_Notifications(db.Model):
+    __tablename__ = 'User_Notifications'
+    notification_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('Customers.customer_id'), nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    type = db.Column(db.String(50), nullable=False)  # 'forum_report', 'system', etc.
+    related_id = db.Column(db.Integer)  # Can reference report_id, post_id, etc.
+    is_read = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=utc_now)
+
+class Complaints(db.Model):
+    __tablename__ = 'Complaints'
+    complaint_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    complainant_id = db.Column(db.Integer, db.ForeignKey('Customers.customer_id'), nullable=False)  # Who filed the complaint
+    complainant_type = db.Column(db.String(20), nullable=False)  # 'customer' or 'delivery'
+    accused_id = db.Column(db.Integer, nullable=False)  # ID of accused (customer_id or employee_id)
+    accused_type = db.Column(db.String(20), nullable=False)  # 'customer', 'chef', 'delivery'
+    complaint_type = db.Column(db.String(20), nullable=False)  # 'complaint' or 'compliment'
+    category = db.Column(db.String(50), nullable=False)  # 'food_quality', 'service', 'behavior', 'delivery', etc.
+    description = db.Column(db.Text, nullable=False)
+    related_order_id = db.Column(db.Integer, db.ForeignKey('Orders.order_id'))  # For food/delivery complaints
+    status = db.Column(db.String(20), default='pending')  # 'pending', 'under_review', 'upheld', 'dismissed', 'disputed', 'appealed', 'repealed', 'resolved'
+    manager_reviewed_by = db.Column(db.Integer, db.ForeignKey('Employees.employee_id'))
+    manager_decision = db.Column(db.Text)  # Manager's explanation
+    created_at = db.Column(db.DateTime, default=utc_now)
+    reviewed_at = db.Column(db.DateTime)
+    disputed_at = db.Column(db.DateTime)
+    dispute_reason = db.Column(db.Text)
+    appealed_at = db.Column(db.DateTime)
+    appeal_message = db.Column(db.Text)
+    disputed_at = db.Column(db.DateTime)
+    dispute_reason = db.Column(db.Text)
+>>>>>>> Stashed changes
 
 def resolve_expired_biddings():
     """
@@ -274,8 +362,8 @@ with app.app_context():
     if Employees.query.count() == 0:
         employees_data = [
             {'name': 'John Manager', 'email': 'manager@bytebite.com', 'password_hash': generate_password_hash('manager123'), 'role': 'Manager', 'profile_image_url': 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtYW5hZ2VyJTIwcHJvZmlsZXxlbnwxfHx8fDE3NjM0ODQwODN8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral'},
-            {'name': 'Chef Mario', 'email': 'chef1@bytebite.com', 'password_hash': generate_password_hash('chef123'), 'role': 'Chef', 'profile_image_url': 'https://images.unsplash.com/photo-1583394838336-acd977736f90?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxpdGFsaWFuJTIwY2hlZnxlbnwxfHx8fDE3NjM0ODQwODR8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral'},
-            {'name': 'Chef Luigi', 'email': 'chef2@bytebite.com', 'password_hash': generate_password_hash('chef123'), 'role': 'Chef', 'profile_image_url': 'https://images.unsplash.com/photo-1559847844-5315695dadae?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxmcmVuY2glMjBjaGVmfGVufDF8fHx8MTc2MzQ4NDA4NXww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral'},
+            {'name': 'Chef Mario', 'email': 'chef1@bytebite.com', 'password_hash': generate_password_hash('chef123'), 'role': 'Chef', 'profile_image_url': 'https://mario.wiki.gallery/images/thumb/9/96/Mario_and_mushroom_SMB1_artwork.png/110px-Mario_and_mushroom_SMB1_artwork.png'},
+            {'name': 'Chef Luigi', 'email': 'chef2@bytebite.com', 'password_hash': generate_password_hash('chef123'), 'role': 'Chef', 'profile_image_url': 'https://mario.wiki.gallery/images/thumb/b/b4/Luigi_NES.png/62px-Luigi_NES.png'},
             {'name': 'Delivery Dave', 'email': 'delivery1@bytebite.com', 'password_hash': generate_password_hash('delivery123'), 'role': 'Delivery', 'profile_image_url': 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxkZWxpdmVyeSUyMGRyaXZlcnxlbnwxfHx8fDE3NjM0ODQwODYgfDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral'},
             {'name': 'Delivery Sarah', 'email': 'delivery2@bytebite.com', 'password_hash': generate_password_hash('delivery123'), 'role': 'Delivery', 'profile_image_url': 'https://images.unsplash.com/photo-1494790108755-2616b612b786?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxmZW1hbGUlMjBkZWxpdmVyeSUyMGRyaXZlcnxlbnwxfHx8fDE3NjM0ODQwODd8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral'},
         ]
@@ -311,7 +399,15 @@ with app.app_context():
         foie = Dishes.query.filter_by(name='Golden Foie Gras').first()
         if foie and not foie.chef_id: foie.chef_id = chef_mario.employee_id
         
-        db.session.commit()
+        # Update Chef Mario's profile image
+        if chef_mario:
+            chef_mario.profile_image_url = 'https://mario.wiki.gallery/images/thumb/9/96/Mario_and_mushroom_SMB1_artwork.png/110px-Mario_and_mushroom_SMB1_artwork.png'
+            db.session.commit()
+        if chef_luigi:
+            chef_luigi.profile_image_url = 'https://mario.wiki.gallery/images/thumb/b/b4/Luigi_NES.png/62px-Luigi_NES.png'
+            db.session.commit()
+
+# Seed AI Knowledge Base if not exists
 with app.app_context():
         if AI_Knowledge_Base.query.count() == 0:
             print("Seeding AI Knowledge Base...")
@@ -320,7 +416,7 @@ with app.app_context():
             kb_data = [
                 {
                     "question": "How can I become a VIP?",
-                    "answer": "To become a VIP member, you need to place at least 5 orders with us. Once you reach 5 orders, the system will automatically upgrade your status."
+                    "answer": "To become a VIP member, you need to spend at least $100 on delivered orders with us. Once you reach $100 in total order value, the system will automatically upgrade your status."
                 },
                 {
                     "question": "What are the benefits of being a VIP?",
@@ -430,9 +526,10 @@ def get_menu():
             token = auth_header.split(' ')[1] if ' ' in auth_header else auth_header
             payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
             email = payload.get('email')
+            role = payload.get('role')
             
-            # Check if this is a customer (not employee)
-            if 'role' not in payload:
+            # Check if this is a customer
+            if role == 'Customer':
                 customer = Customers.query.filter_by(email=email).first()
                 if customer:
                     # Check if customer is VIP
@@ -447,17 +544,23 @@ def get_menu():
         # VIP customers see all dishes
         dishes = Dishes.query.all()
     else:
+<<<<<<< Updated upstream
         # Non-VIP customers and visitors only see non-VIP dishes
+=======
+        # Non-VIP users and visitors only see non-VIP dishes
+>>>>>>> Stashed changes
         dishes = Dishes.query.filter_by(is_vip=False).all()
     
     menu_items = []
     for dish in dishes:
-        # Get chef name if chef_id exists
+        # Get chef name and image if chef_id exists
         chef_name = None
+        chef_image = None
         if dish.chef_id:
             chef = Employees.query.filter_by(employee_id=dish.chef_id).first()
             if chef:
                 chef_name = chef.name
+                chef_image = chef.profile_image_url
         
         # Calculate average rating for this dish
         avg_rating = None
@@ -481,6 +584,7 @@ def get_menu():
             'image': dish.image_url,
             'is_vip': dish.is_vip,
             'chef_name': chef_name,
+            'chef_image': chef_image,
             'rating': avg_rating
         }
         menu_items.append(item)
@@ -510,6 +614,11 @@ def register():
     blacklisted = Blacklist.query.filter_by(email=email).first()
     if blacklisted:
         return jsonify({"success": False, "message": "This email is blacklisted from this website."}), 403
+
+    # Check if email belongs to a blacklisted customer
+    existing_blacklisted = Customers.query.filter_by(email=email, is_blacklisted=True).first()
+    if existing_blacklisted:
+        return jsonify({"success": False, "message": "This email belongs to a blacklisted account and cannot be used for registration."}), 403
 
     # Check for existing user
     existing = Customers.query.filter((Customers.username == username) | (Customers.email == email)).first()
@@ -555,11 +664,16 @@ def login():
     if not user:
         return jsonify({"success": False, "message": "Invalid email or password"}), 401
 
+    # Check if user is blacklisted
+    if user.is_blacklisted:
+        return jsonify({"success": False, "message": "Your account has been blacklisted. Please contact support."}), 403
+
     if not check_password_hash(user.password_hash, password):
         return jsonify({"success": False, "message": "Invalid email or password"}), 401
 
     token = jwt.encode({
         'email': email,
+        'role': 'Customer',
         'exp': datetime.now(timezone.utc) + timedelta(hours=24)
     }, app.secret_key, algorithm='HS256')
 
@@ -687,7 +801,9 @@ def get_employees():
             "email": emp.email,
             "role": emp.role,
             "status": emp.status,
-            "reputation_score": float(emp.reputation_score) if emp.reputation_score else 5.0
+            "reputation_score": float(emp.reputation_score) if emp.reputation_score else 5.0,
+            "complaint_count": emp.complaint_count,
+            "demotion_count": emp.demotion_count
         })
     return jsonify({"success": True, "employees": employee_list}), 200
 
@@ -742,6 +858,8 @@ def update_employee(employee_id):
         employee.status = 'Fired'
     elif action == 'activate':
         employee.status = 'Active'
+        employee.demotion_count = 0  # Reset demotions
+        employee.complaint_count = 0  # Reset complaints
     elif action in ['promote', 'demote']:
         # For now, just update reputation score
         current_score = float(employee.reputation_score) if employee.reputation_score else 5.0
@@ -800,6 +918,7 @@ def delete_employee(employee_id):
 # Get all customers (for management)
 @app.route('/api/manager/customers', methods=['GET'])
 @require_role('Manager')
+<<<<<<< Updated upstream
 def get_customers():
     customers = Customers.query.all()
     customer_list = []
@@ -823,6 +942,57 @@ def get_customers():
             "is_blacklisted": cust.is_blacklisted
         })
     return jsonify({"success": True, "customers": customer_list}), 200
+=======
+def manage_customers():
+    if request.method == 'GET':
+        customers = Customers.query.all()
+        customer_list = []
+        for cust in customers:
+            vip_record = VIP_Customers.query.filter_by(customer_id=cust.customer_id).first()
+            is_vip = vip_record is not None
+            customer_list.append({
+                "id": cust.customer_id,
+                "username": cust.username,
+                "email": cust.email,
+                "balance": float(cust.deposited_cash) if cust.deposited_cash else 0.0,
+                "warning_count": cust.warning_count,
+                "order_count": cust.order_count,
+                "is_vip": is_vip,
+                "is_blacklisted": cust.is_blacklisted
+            })
+        return jsonify({"success": True, "customers": customer_list}), 200
+
+    elif request.method == 'PUT':
+        data = request.get_json()
+        customer_id = data.get('customer_id')
+        action = data.get('action')  # 'promote_vip' or 'demote_vip'
+
+        customer = Customers.query.get(customer_id)
+        if not customer:
+            return jsonify({"success": False, "message": "Customer not found"}), 404
+
+        vip_record = VIP_Customers.query.filter_by(customer_id=customer.customer_id).first()
+
+        if action == 'promote_vip':
+            if not vip_record:
+                new_vip = VIP_Customers(
+                    customer_id=customer.customer_id,
+                    vip_start_date=datetime.utcnow(),
+                    free_deliveries_remaining=customer.order_count // 3,  # 1 free delivery for every 3 orders
+                )
+                db.session.add(new_vip)
+                db.session.commit()
+            return jsonify({"success": True, "message": f"{customer.username} promoted to VIP"}), 200
+
+        elif action == 'demote_vip':
+            if vip_record:
+                db.session.delete(vip_record)
+                db.session.commit()
+            return jsonify({"success": True, "message": f"{customer.username} demoted from VIP"}), 200
+
+        else:
+            return jsonify({"success": False, "message": "Invalid action"}), 400 
+>>>>>>> Stashed changes
 
 
     return jsonify({"success": True, "customers": customer_list}), 200
@@ -831,6 +1001,7 @@ def get_customers():
 @require_role('Manager')
 def update_customer_manager(customer_id):
     data = request.get_json()
+    print(f"Updating customer {customer_id} with data: {data}")
     customer = Customers.query.get(customer_id)
     
     if not customer:
@@ -839,7 +1010,10 @@ def update_customer_manager(customer_id):
     try:
         # Update balance (deposit)
         if 'deposited_cash' in data:
-            customer.deposited_cash = Decimal(str(data['deposited_cash']))
+            try:
+                customer.deposited_cash = Decimal(str(data['deposited_cash']))
+            except (ValueError, TypeError):
+                return jsonify({"success": False, "message": "Invalid deposited_cash value"}), 400
         
         # Update other fields if needed
         if 'username' in data:
@@ -851,12 +1025,33 @@ def update_customer_manager(customer_id):
         
         # Handle Blacklist status
         if 'is_blacklisted' in data:
+            old_blacklist_status = customer.is_blacklisted
             customer.is_blacklisted = data['is_blacklisted']
+            
+            if data['is_blacklisted'] and not old_blacklist_status:
+                # Blacklisting: add to blacklist table
+                existing_blacklist = Blacklist.query.filter(
+                    (Blacklist.email == customer.email) | (Blacklist.customer_id == customer.customer_id)
+                ).first()
+                if not existing_blacklist:
+                    blacklist_entry = Blacklist(
+                        customer_id=customer.customer_id,
+                        email=customer.email,
+                        reason="Customer blacklisted by manager",
+                        date_added=datetime.now(timezone.utc)
+                    )
+                    db.session.add(blacklist_entry)
+            elif not data['is_blacklisted'] and old_blacklist_status:
+                # Unblacklisting: remove from blacklist table
+                blacklist_entry = Blacklist.query.filter_by(customer_id=customer.customer_id).first()
+                if blacklist_entry:
+                    db.session.delete(blacklist_entry)
 
         db.session.commit()
         return jsonify({"success": True, "message": "Customer updated successfully"}), 200
     except Exception as e:
         db.session.rollback()
+        print(f"Error updating customer {customer_id}: {e}")
         return jsonify({"success": False, "message": "Failed to update customer", "error": str(e)}), 500
     
 # Delete Customer (Manager)
@@ -868,6 +1063,20 @@ def delete_customer_manager(customer_id):
         return jsonify({"success": False, "message": "Customer not found"}), 404
         
     try:
+        # If customer is blacklisted, ensure their email remains in blacklist table
+        if customer.is_blacklisted:
+            # Check if email is already in blacklist
+            existing_blacklist = Blacklist.query.filter_by(email=customer.email).first()
+            if not existing_blacklist:
+                # Add to blacklist to prevent future registrations
+                blacklist_entry = Blacklist(
+                    customer_id=customer.customer_id,
+                    email=customer.email,
+                    reason="Account deleted while blacklisted",
+                    date_added=datetime.now(timezone.utc)
+                )
+                db.session.add(blacklist_entry)
+        
         # Note: You might need to handle cascading deletes for Orders/Reviews depending on your DB setup
         # For now, we assume simple deletion or you might prefer soft-delete (blacklisting)
         db.session.delete(customer)
@@ -876,6 +1085,80 @@ def delete_customer_manager(customer_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({"success": False, "message": "Failed to delete customer (User might have associated orders)", "error": str(e)}), 500
+
+# Toggle VIP status for customer (Manager only)
+@app.route('/api/manager/customers/<int:customer_id>/vip', methods=['PUT'])
+@require_role('Manager')
+def toggle_customer_vip(customer_id):
+    data = request.get_json()
+    promote = data.get('promote', False)
+    
+    customer = Customers.query.get(customer_id)
+    if not customer:
+        return jsonify({"success": False, "message": "Customer not found"}), 404
+    
+    try:
+        if promote:
+            # Add to VIP_Customers if not already VIP
+            existing_vip = VIP_Customers.query.filter_by(customer_id=customer_id).first()
+            if not existing_vip:
+                vip_record = VIP_Customers(
+                    customer_id=customer_id, 
+                    vip_start_date=datetime.now().date(),
+                    free_deliveries_remaining=customer.order_count // 3  # 1 free delivery for every 3 orders
+                )
+                db.session.add(vip_record)
+                # Reset warnings as VIP "forgiveness"
+                customer.warning_count = 0
+        else:
+            # Remove from VIP_Customers
+            vip_record = VIP_Customers.query.filter_by(customer_id=customer_id).first()
+            if vip_record:
+                db.session.delete(vip_record)
+                customer.warning_count = 0  # Uncomment if you want to reset on demotion too
+        
+        db.session.commit()
+        return jsonify({"success": True, "message": f"Customer {'promoted to' if promote else 'demoted from'} VIP successfully"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": "Failed to update VIP status"}), 500
+
+# Add warning to customer (Manager only)
+@app.route('/api/manager/customers/<int:customer_id>/warning', methods=['POST'])
+@require_role('Manager')
+def add_customer_warning(customer_id):
+    customer = Customers.query.get(customer_id)
+    if not customer:
+        return jsonify({"success": False, "message": "Customer not found"}), 404
+    
+    try:
+        # Increment warning count
+        customer.warning_count += 1
+        
+        # Auto-demote VIP customers after 2 warnings
+        if customer.warning_count >= 2:
+            vip_record = VIP_Customers.query.filter_by(customer_id=customer.customer_id).first()
+            if vip_record:
+                db.session.delete(vip_record)
+                customer.warning_count = 0
+        
+        # Auto-blacklist after 3 warnings
+        if customer.warning_count >= 3:
+            customer.is_blacklisted = True
+        
+        # Create warning record
+        warning = Warnings(
+            customer_id=customer_id,
+            reason="Warning issued by manager",
+            created_at=datetime.utcnow()
+        )
+        db.session.add(warning)
+        db.session.commit()
+        
+        return jsonify({"success": True, "message": "Warning added successfully"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": "Failed to add warning"}), 500
 
 # 1. Get all active biddings with details
 @app.route('/api/manager/biddings', methods=['GET'])
@@ -1197,6 +1480,35 @@ def get_profile():
         print(f"[GET_PROFILE] User not found: {email}")
         return jsonify({"success": False, "message": "User not found"}), 404
 
+    vip_record = VIP_Customers.query.filter_by(customer_id=user.customer_id).first()
+    is_vip = vip_record is not None
+
+    # Calculate total spent on delivered orders
+    total_spent = db.session.query(db.func.sum(Orders.total_price)).filter(
+        Orders.customer_id == user.customer_id, 
+        Orders.status == 'Delivered'
+    ).scalar() or Decimal('0.00')
+
+    # Automatic promotion if total spent >= $100
+    if not is_vip and total_spent >= Decimal('100.00'):
+        try:
+            # Promote user to VIP
+            new_vip = VIP_Customers(
+                customer_id=user.customer_id,
+                vip_start_date=datetime.utcnow(),
+                free_deliveries_remaining=user.order_count // 3,  # 1 free delivery for every 3 orders
+            )
+            db.session.add(new_vip)
+            db.session.commit()
+            is_vip = True
+            vip_record = new_vip
+            print(f"[GET_PROFILE] Auto-promoted {user.username} to VIP based on ${total_spent} spent")
+        except IntegrityError:
+            db.session.rollback()
+            # Already VIP, perhaps promoted elsewhere
+            vip_record = VIP_Customers.query.filter_by(customer_id=user.customer_id).first()
+            is_vip = vip_record is not None
+            print(f"[GET_PROFILE] User {user.username} already VIP") 
     print(f"[GET_PROFILE] Returning user data: deposited_cash={getattr(user, 'deposited_cash', None)}")
     return jsonify({
         "success": True,
@@ -1209,6 +1521,7 @@ def get_profile():
             "warning_count": user.warning_count,
             "order_count": user.order_count,
             "created_at": user.created_at.isoformat() if user.created_at else None,
+            "is_vip": is_vip
         }
     }), 200
 
@@ -1241,6 +1554,16 @@ def update_profile():
         print(f"[UPDATE_PROFILE] Received data: {data}")
 
         # Update fields if provided
+        if 'username' in data:
+            user.username = data['username']
+        if 'email' in data:
+            # Check if email is already taken by another user
+            existing_user = Customers.query.filter_by(email=data['email']).first()
+            if existing_user and existing_user.customer_id != user.customer_id:
+                return jsonify({"success": False, "message": "Email address is already in use"}), 400
+            user.email = data['email']
+        if 'phone_number' in data:
+            user.phone_number = data['phone_number']
         if 'name' in data:
             user.username = data['name'] # Note: Assuming frontend sends 'name' for username updates
         if 'address' in data:
@@ -1322,12 +1645,70 @@ def create_order():
         if not user:
             return jsonify({"success": False, "message": "User not found"}), 404
 
+        # Check if user is blacklisted
+        if user.is_blacklisted:
+            return jsonify({"success": False, "message": "Your account has been blacklisted. Please contact support."}), 403
+
+        # Check if user can order VIP dishes
+        vip_record = VIP_Customers.query.filter_by(customer_id=user.customer_id).first()
+        is_vip = vip_record is not None
+        
+        for item in cart_items:
+            dish = Dishes.query.get(int(item['id']))
+            if not dish:
+                return jsonify({"success": False, "message": f"Dish with ID {item['id']} not found"}), 404
+            if dish.is_vip and not is_vip:
+                return jsonify({"success": False, "message": f"You must be a VIP customer to order {dish.name}"}), 403
+
         order_total = float(total_price)
+        
+        # Calculate delivery fee
+        delivery_fee = Decimal('5.00')  # Default delivery fee
+        requires_delivery = full_address and full_address != "Pickup"
+        
+        if requires_delivery and is_vip and vip_record:
+            # For VIP customers, every 3rd order is free delivery
+            current_order_count = vip_record.order_count or 0
+            if (current_order_count + 1) % 3 == 0:
+                delivery_fee = Decimal('0.00')
+        
+        # Add delivery fee to order total
+        order_total = order_total + float(delivery_fee)
+        
+        # Check if user is VIP and apply 5% discount only to non-VIP dishes
+        vip_record = VIP_Customers.query.filter_by(customer_id=user.customer_id).first()
+        is_vip = vip_record is not None
+        vip_discount = Decimal('0.00')
+        
+        if is_vip:
+            # Calculate discount only on non-VIP dishes
+            non_vip_subtotal = Decimal('0.00')
+            for item in cart_items:
+                dish = Dishes.query.get(int(item['id']))
+                if dish and not dish.is_vip:  # Only apply discount to non-VIP dishes
+                    item_total = Decimal(str(dish.price)) * Decimal(str(item['quantity']))
+                    non_vip_subtotal += item_total
+            
+            vip_discount = non_vip_subtotal * Decimal('0.05')  # 5% discount on non-VIP dishes only
+            order_total = float(Decimal(str(order_total)) - vip_discount)
+        
         current_balance = float(user.deposited_cash or 0)
 
         if current_balance < order_total:
             # Record warning for insufficient balance
             user.warning_count = (user.warning_count or 0) + 1
+            
+            # Auto-demote VIP customers after 2 warnings
+            if user.warning_count >= 2:
+                vip_record = VIP_Customers.query.filter_by(customer_id=user.customer_id).first()
+                if vip_record:
+                    db.session.delete(vip_record)
+                    user.warning_count = 0
+            
+            # Auto-blacklist after 3 warnings
+            if user.warning_count >= 3:
+                user.is_blacklisted = True
+            
             db.session.commit()
             return jsonify({"success": False, "message": "Insufficient funds"}), 400
 
@@ -1335,9 +1716,25 @@ def create_order():
         user.deposited_cash = current_balance - order_total
         user.order_count = (user.order_count or 0) + 1
         
-        # Assign a chef (simple assignment logic for MVP)
-        default_chef = Employees.query.filter_by(role='Chef').first()
-        chef_id = default_chef.employee_id if default_chef else None
+        # Get cart dishes to assign chef
+        cart_dishes = [Dishes.query.get(int(item['id'])) for item in cart_items]
+        
+        # Assign chef based on dishes in cart
+        chef_id = None
+        if cart_dishes:
+            # Get all chef_ids from dishes in cart
+            chef_ids = [dish.chef_id for dish in cart_dishes if dish and dish.chef_id]
+            if chef_ids:
+                # Count occurrences of each chef
+                from collections import Counter
+                chef_counts = Counter(chef_ids)
+                # Assign to chef with most dishes in the order
+                most_common_chef = chef_counts.most_common(1)[0][0]
+                chef_id = most_common_chef
+            else:
+                # Fallback to first chef if no dishes have chefs assigned
+                default_chef = Employees.query.filter_by(role='Chef').first()
+                chef_id = default_chef.employee_id if default_chef else None
 
         # A. Create order record
         new_order = Orders(
@@ -1345,6 +1742,8 @@ def create_order():
             chef_id=chef_id, 
             status='Pending',
             total_price=order_total,
+            vip_discount=vip_discount,
+            delivery_fee=delivery_fee,
             order_time=datetime.now(timezone.utc),
             delivery_address=full_address if full_address else "Pickup",
             delivery_phone=contact_phone if contact_phone else user.phone_number
@@ -1382,7 +1781,10 @@ def create_order():
             "success": True,
             "orderId": new_order.order_id,
             "message": "Order placed successfully",
-            "estimatedDelivery": "30-45 minutes"
+            "estimatedDelivery": "30-45 minutes",
+            "deliveryFee": float(delivery_fee),
+            "vipDiscount": float(vip_discount),
+            "finalTotal": order_total
         }), 201
 
     except Exception as e:
@@ -1423,11 +1825,11 @@ def get_financial_logs():
 def get_orders():
     auth_header = request.headers.get('Authorization')
     if not auth_header:
-        return jsonify({"success": False, "message": "Unauthorized"}), 401
+        return jsonify({"success": False, "message": "Authentication required to view orders"}), 401
     
     try:
         # Decode token to get user email
-        token = auth_header.split(' ')[1]
+        token = auth_header.split(' ')[1] if ' ' in auth_header else auth_header
         payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
         user = Customers.query.filter_by(email=payload['email']).first()
         
@@ -1439,20 +1841,23 @@ def get_orders():
         
         orders_data = []
         for order in orders:
-            # Check if this order already has a review in the Reviews table
+            # Check if this order already has a review
             review = Reviews.query.filter_by(order_id=order.order_id).first()
             
             orders_data.append({
                 "order_id": order.order_id,
                 "total": float(order.total_price),
                 "status": order.status,
-                # Format date as YYYY-MM-DD
-                "date": order.order_time.strftime('%Y-%m-%d'), 
+                "date": order.order_time.strftime('%Y-%m-%d') if order.order_time else None,
                 "has_review": review is not None
             })
             
         return jsonify({"success": True, "orders": orders_data}), 200
         
+    except jwt.ExpiredSignatureError:
+        return jsonify({"success": False, "message": "Session expired. Please login again"}), 401
+    except jwt.InvalidTokenError:
+        return jsonify({"success": False, "message": "Invalid session. Please login again"}), 401
     except Exception as e:
         print(f"Error fetching orders: {e}")
         return jsonify({"success": False, "message": "Failed to fetch orders"}), 500
@@ -1667,28 +2072,96 @@ def get_delivery_deliveries():
     payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
     delivery_person = Employees.query.filter_by(email=payload['email']).first()
 
-    # Get orders assigned to me that have not yet become Delivered
-    orders = Orders.query.filter(
+    # Get current deliveries (In Transit)
+    current_deliveries = Orders.query.filter(
         Orders.delivery_person_id == delivery_person.employee_id,
-        Orders.status == 'In Transit' # Only show what is currently being delivered; delivered items are not shown
+        Orders.status == 'In Transit'
     ).all()
 
+    # Get recently completed deliveries (last 30 days) for feedback submission
+    thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
+    completed_deliveries = Orders.query.filter(
+        Orders.delivery_person_id == delivery_person.employee_id,
+        Orders.status == 'Delivered',
+        Orders.completion_time >= thirty_days_ago
+    ).order_by(Orders.completion_time.desc()).all()
+
     deliveries_list = []
-    for order in orders:
+    
+    # Add current deliveries
+    for order in current_deliveries:
         customer = Customers.query.get(order.customer_id)
         deliveries_list.append({
             "order_id": order.order_id,
             "customer_id": order.customer_id,
-            "customer_name": customer.username,
+            "customer_name": customer.username if customer else "Unknown",
             "customer_address": order.delivery_address,
             "customer_phone": order.delivery_phone,
             "status": order.status,
             "total_price": float(order.total_price),
-            "order_time": order.order_time.isoformat()
+            "order_time": order.order_time.isoformat(),
+            "can_submit_feedback": False,
+            "feedback_submitted": False
+        })
+
+    # Add completed deliveries with feedback status
+    for order in completed_deliveries:
+        customer = Customers.query.get(order.customer_id)
+        
+        # Check if feedback has already been submitted for this delivery
+        feedback_submitted = Complaints.query.filter_by(
+            complainant_id=delivery_person.employee_id,
+            complainant_type='delivery',
+            accused_id=order.customer_id,
+            accused_type='customer',
+            related_order_id=order.order_id
+        ).first() is not None
+        
+        deliveries_list.append({
+            "order_id": order.order_id,
+            "customer_id": order.customer_id,
+            "customer_name": customer.username if customer else "Unknown",
+            "customer_address": order.delivery_address,
+            "customer_phone": order.delivery_phone,
+            "status": order.status,
+            "total_price": float(order.total_price),
+            "order_time": order.order_time.isoformat(),
+            "completion_time": order.completion_time.isoformat() if order.completion_time else None,
+            "can_submit_feedback": True,
+            "feedback_submitted": feedback_submitted
         })
 
     return jsonify({"success": True, "deliveries": deliveries_list}), 200
 
+# Get feedback categories for delivery drivers
+@app.route('/api/delivery/feedback-categories', methods=['GET'])
+@require_role('Delivery')
+def get_delivery_feedback_categories():
+    """Get available categories for delivery driver feedback about customers"""
+    categories = {
+        "complaint": [
+            "rude_behavior",
+            "property_damage", 
+            "unsafe_location",
+            "inappropriate_requests",
+            "payment_issues",
+            "other"
+        ],
+        "compliment": [
+            "friendly",
+            "helpful",
+            "clean_property",
+            "good_communication",
+            "generous_tip",
+            "other"
+        ]
+    }
+    
+    return jsonify({
+        "success": True, 
+        "categories": categories,
+        "feedback_types": ["complaint", "compliment"]
+    }), 200
 
 # 5. Update delivery status (In Transit -> Delivered)
 @app.route('/api/delivery/update-status', methods=['POST'])
@@ -1707,9 +2180,88 @@ def update_delivery_status():
         order.completion_time = datetime.now(timezone.utc)
     
     db.session.commit()
-    return jsonify({"success": True, "message": f"Order status updated to {new_status}"}), 200#wei
-    
-# wei
+    return jsonify({"success": True, "message": f"Order status updated to {new_status}", "show_feedback_prompt": new_status == 'Delivered'}), 200
+
+# Delivery driver feedback about customer after delivery completion
+@app.route('/api/delivery/customer-feedback', methods=['POST'])
+@require_role('Delivery')
+def submit_delivery_customer_feedback():
+    """Allow delivery drivers to submit complaints or compliments about customers after delivery completion"""
+    data = request.get_json()
+    order_id = data.get('order_id')
+    feedback_type = data.get('feedback_type')  # 'complaint' or 'compliment'
+    category = data.get('category')  # e.g., 'rude', 'helpful', 'clean', 'messy', etc.
+    description = data.get('description')
+
+    if not all([order_id, feedback_type, category, description]):
+        return jsonify({"success": False, "message": "All fields required"}), 400
+
+    if feedback_type not in ['complaint', 'compliment']:
+        return jsonify({"success": False, "message": "Invalid feedback type"}), 400
+
+    try:
+        # Get delivery driver info
+        auth_header = request.headers.get('Authorization')
+        token = auth_header.split(' ')[1]
+        payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+        delivery_driver = Employees.query.filter_by(email=payload['email']).first()
+
+        # Verify the order exists and was delivered by this driver
+        order = Orders.query.filter_by(
+            order_id=order_id,
+            delivery_person_id=delivery_driver.employee_id,
+            status='Delivered'
+        ).first()
+
+        if not order:
+            return jsonify({"success": False, "message": "Order not found or not delivered by you"}), 404
+
+        # Get customer info
+        customer = Customers.query.get(order.customer_id)
+        if not customer:
+            return jsonify({"success": False, "message": "Customer not found"}), 404
+
+        # Check if feedback already submitted for this order by this driver
+        existing_feedback = Complaints.query.filter_by(
+            complainant_id=delivery_driver.employee_id,
+            complainant_type='delivery',
+            accused_id=customer.customer_id,
+            accused_type='customer',
+            related_order_id=order_id
+        ).first()
+
+        if existing_feedback:
+            return jsonify({"success": False, "message": "Feedback already submitted for this delivery"}), 400
+
+        # Create the feedback complaint/compliment
+        new_feedback = Complaints(
+            complainant_id=delivery_driver.employee_id,
+            complainant_type='delivery',
+            accused_id=customer.customer_id,
+            accused_type='customer',
+            complaint_type=feedback_type,
+            category=category,
+            description=description,
+            related_order_id=order_id
+        )
+
+        # If this is a compliment, mark as resolved and decrement warning count
+        if feedback_type == 'compliment':
+            new_feedback.status = 'resolved'
+            new_feedback.reviewed_at = datetime.now(timezone.utc)
+            if customer.warning_count > 0:
+                customer.warning_count -= 1
+
+        db.session.add(new_feedback)
+        db.session.commit()
+
+        return jsonify({"success": True, "message": f"Feedback submitted successfully"}), 201
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"Delivery feedback error: {e}")
+        return jsonify({"success": False, "message": "Failed to submit feedback"}), 500
+
 
 # 1. Submit a review
 @app.route('/api/reviews', methods=['POST'])
@@ -1726,12 +2278,20 @@ def create_review():
     except:
         return jsonify({"success": False, "message": "Invalid token"}), 401
 
+    # Check if customer is VIP
+    is_vip = VIP_Customers.query.filter_by(customer_id=user.customer_id).first() is not None
+    multiplier = 2 if is_vip else 1
+
     data = request.get_json()
     order_id = data.get('order_id')
     chef_rating = data.get('chef_rating')
     dish_rating = data.get('dish_rating')
     delivery_rating = data.get('delivery_rating')
     comment = data.get('comment')
+    compliment_chef = data.get('compliment_chef', False)
+    complaint_chef = data.get('complaint_chef', False)
+    compliment_delivery = data.get('compliment_delivery', False)
+    complaint_delivery = data.get('complaint_delivery', False)
 
     # Simple verification
     if not all([order_id, chef_rating, dish_rating, delivery_rating]):
@@ -1773,6 +2333,9 @@ def create_review():
                 chef = Employees.query.get(order.chef_id)
                 # Convert to Decimal and round to 2 decimal places
                 chef.reputation_score = round(Decimal(avg_chef_rating), 2)
+                
+                # Evaluate chef performance after rating update
+                evaluate_employee_performance(chef)
 
         # 3. Update Delivery Person's Reputation Score
         if order.delivery_person_id:
@@ -1786,6 +2349,83 @@ def create_review():
                 delivery_person.reputation_score = round(Decimal(avg_delivery_rating), 2)
 
         # Commit the updates to employee scores
+        db.session.commit()
+
+        # 4. Handle compliments and complaints
+        if compliment_chef and order.chef_id:
+            chef_compliment = Complaints(
+                complainant_id=user.customer_id,
+                complainant_type='customer',
+                accused_id=order.chef_id,
+                accused_type='chef',
+                complaint_type='compliment',
+                category='service',
+                description=f"Compliment from review: {comment}",
+                related_order_id=order_id
+            )
+            db.session.add(chef_compliment)
+            # Increment chef's compliment_count and decrement complaint_count
+            chef = Employees.query.get(order.chef_id)
+            if chef:
+                chef.compliment_count += multiplier
+                chef.complaint_count = max(0, chef.complaint_count - multiplier)
+                db.session.add(chef)
+
+        if complaint_chef and order.chef_id:
+            chef_complaint = Complaints(
+                complainant_id=user.customer_id,
+                complainant_type='customer',
+                accused_id=order.chef_id,
+                accused_type='chef',
+                complaint_type='complaint',
+                category='service',
+                description=f"Complaint from review: {comment}",
+                related_order_id=order_id
+            )
+            db.session.add(chef_complaint)
+            # Increment chef's complaint_count
+            chef = Employees.query.get(order.chef_id)
+            if chef:
+                chef.complaint_count += multiplier
+                db.session.add(chef)
+
+        if compliment_delivery and order.delivery_person_id:
+            delivery_compliment = Complaints(
+                complainant_id=user.customer_id,
+                complainant_type='customer',
+                accused_id=order.delivery_person_id,
+                accused_type='delivery',
+                complaint_type='compliment',
+                category='service',
+                description=f"Compliment from review: {comment}",
+                related_order_id=order_id
+            )
+            db.session.add(delivery_compliment)
+            # Increment delivery's compliment_count and decrement complaint_count
+            delivery_person = Employees.query.get(order.delivery_person_id)
+            if delivery_person:
+                delivery_person.compliment_count += multiplier
+                delivery_person.complaint_count = max(0, delivery_person.complaint_count - multiplier)
+                db.session.add(delivery_person)
+
+        if complaint_delivery and order.delivery_person_id:
+            delivery_complaint = Complaints(
+                complainant_id=user.customer_id,
+                complainant_type='customer',
+                accused_id=order.delivery_person_id,
+                accused_type='delivery',
+                complaint_type='complaint',
+                category='service',
+                description=f"Complaint from review: {comment}",
+                related_order_id=order_id
+            )
+            db.session.add(delivery_complaint)
+            # Increment delivery's complaint_count
+            delivery_person = Employees.query.get(order.delivery_person_id)
+            if delivery_person:
+                delivery_person.complaint_count += multiplier
+                db.session.add(delivery_person)
+
         db.session.commit()
 
         return jsonify({"success": True, "message": "Review submitted and scores updated successfully"}), 201
@@ -1825,36 +2465,133 @@ def get_chef_reviews():
 @app.route('/api/chefs/featured', methods=['GET'])
 def get_featured_chefs():
     try:
-        # Get all chefs with their average ratings
-        chefs = Employees.query.filter_by(role='Chef').all()
+        # Get chef with most dishes
+        chef_most_dishes = db.session.query(
+            Employees.employee_id, Employees.name, Employees.reputation_score, Employees.profile_image_url,
+            db.func.count(Dishes.dish_id).label('total_dishes')
+        ).join(Dishes, Employees.employee_id == Dishes.chef_id)\
+         .filter(Employees.role == 'Chef')\
+         .group_by(Employees.employee_id, Employees.name, Employees.reputation_score, Employees.profile_image_url)\
+         .order_by(db.func.count(Dishes.dish_id).desc())\
+         .first()
+        
+        # Get chef with highest rating
+        chef_highest_rating = db.session.query(
+            Employees.employee_id, Employees.name, Employees.reputation_score, Employees.profile_image_url,
+            db.func.avg(Reviews.chef_rating).label('avg_rating')
+        ).join(Reviews, Employees.employee_id == Reviews.chef_id)\
+         .filter(Employees.role == 'Chef')\
+         .group_by(Employees.employee_id, Employees.name, Employees.reputation_score, Employees.profile_image_url)\
+         .order_by(db.func.avg(Reviews.chef_rating).desc())\
+         .first()
+        
         featured_chefs = []
         
-        for chef in chefs:
-            # Calculate average chef rating from reviews
-            avg_rating = None
-            try:
-                rating_result = db.session.query(db.func.avg(Reviews.chef_rating)).\
-                    filter(Reviews.chef_id == chef.employee_id).\
-                    scalar()
-                if rating_result is not None:
-                    avg_rating = round(float(rating_result), 1)
-            except Exception as e:
-                pass
-            
-            # Count dishes by this chef
-            dish_count = Dishes.query.filter_by(chef_id=chef.employee_id).count()
+        # Add chef with most dishes
+        if chef_most_dishes:
+            # Calculate dish count for this chef
+            dish_count = Dishes.query.filter_by(chef_id=chef_most_dishes.employee_id).count()
             
             featured_chefs.append({
-                'employee_id': chef.employee_id,
-                'name': chef.name,
-                'rating': avg_rating,
+                'employee_id': chef_most_dishes.employee_id,
+                'name': chef_most_dishes.name,
+                'rating': None,  # We'll calculate this below
                 'dish_count': dish_count,
-                'reputation_score': float(chef.reputation_score) if chef.reputation_score else 5.0
+                'reputation_score': float(chef_most_dishes.reputation_score) if chef_most_dishes.reputation_score else 5.0,
+                'profile_image_url': chef_most_dishes.profile_image_url,
+                'total_dishes': chef_most_dishes.total_dishes
             })
         
-        # Sort by rating (highest first) and limit to top 3
-        featured_chefs.sort(key=lambda x: x['rating'] or 0, reverse=True)
-        featured_chefs = featured_chefs[:3]
+        # If we don't have 2 chefs yet, try to get the second highest rated chef
+        if len(featured_chefs) < 2:
+            # Get the second highest rated chef (excluding the one we already have)
+            excluded_ids = [chef['employee_id'] for chef in featured_chefs]
+            chef_second_highest = db.session.query(
+                Employees.employee_id, Employees.name, Employees.reputation_score, Employees.profile_image_url,
+                db.func.avg(Reviews.chef_rating).label('avg_rating')
+            ).join(Reviews, Employees.employee_id == Reviews.chef_id)\
+             .filter(Employees.role == 'Chef')\
+             .filter(~Employees.employee_id.in_(excluded_ids))\
+             .group_by(Employees.employee_id, Employees.name, Employees.reputation_score, Employees.profile_image_url)\
+             .order_by(db.func.avg(Reviews.chef_rating).desc())\
+             .first()
+            
+            if chef_second_highest:
+                # Calculate dish count for this chef
+                dish_count = Dishes.query.filter_by(chef_id=chef_second_highest.employee_id).count()
+                
+                featured_chefs.append({
+                    'employee_id': chef_second_highest.employee_id,
+                    'name': chef_second_highest.name,
+                    'rating': round(float(chef_second_highest.avg_rating), 1),
+                    'dish_count': dish_count,
+                    'reputation_score': float(chef_second_highest.reputation_score) if chef_second_highest.reputation_score else 5.0,
+                    'profile_image_url': chef_second_highest.profile_image_url,
+                    'total_orders': None  # We'll calculate this below
+                })
+        
+        # If we still don't have 2 chefs, get any other chef with dishes
+        if len(featured_chefs) < 2:
+            # Get another chef with dishes (excluding ones we already have)
+            excluded_ids = [chef['employee_id'] for chef in featured_chefs]
+            other_chef = db.session.query(
+                Employees.employee_id, Employees.name, Employees.reputation_score, Employees.profile_image_url
+            ).join(Dishes, Employees.employee_id == Dishes.chef_id)\
+             .filter(Employees.role == 'Chef')\
+             .filter(~Employees.employee_id.in_(excluded_ids))\
+             .group_by(Employees.employee_id, Employees.name, Employees.reputation_score, Employees.profile_image_url)\
+             .first()
+            
+            if other_chef:
+                # Calculate dish count and rating for this chef
+                dish_count = Dishes.query.filter_by(chef_id=other_chef.employee_id).count()
+                
+                # Calculate average rating
+                rating = None
+                try:
+                    rating_result = db.session.query(db.func.avg(Reviews.chef_rating)).\
+                        filter(Reviews.chef_id == other_chef.employee_id).\
+                        scalar()
+                    if rating_result is not None:
+                        rating = round(float(rating_result), 1)
+                except Exception as e:
+                    pass
+                
+                featured_chefs.append({
+                    'employee_id': other_chef.employee_id,
+                    'name': other_chef.name,
+                    'rating': rating,
+                    'dish_count': dish_count,
+                    'reputation_score': float(other_chef.reputation_score) if other_chef.reputation_score else 5.0,
+                    'profile_image_url': other_chef.profile_image_url,
+                    'total_orders': None  # We'll calculate this below
+                })
+        
+        # Calculate ratings and order counts for all featured chefs
+        for chef in featured_chefs:
+            if chef['rating'] is None:
+                # Calculate average rating
+                try:
+                    rating_result = db.session.query(db.func.avg(Reviews.chef_rating)).\
+                        filter(Reviews.chef_id == chef['employee_id']).\
+                        scalar()
+                    if rating_result is not None:
+                        chef['rating'] = round(float(rating_result), 1)
+                except Exception as e:
+                    chef['rating'] = None
+            
+            if chef.get('total_orders') is None and chef.get('total_dishes') is None:
+                # Calculate total orders or dishes
+                try:
+                    orders_result = db.session.query(db.func.count(Order_Items.order_id)).\
+                        join(Dishes, Order_Items.dish_id == Dishes.dish_id)\
+                        .join(Orders, Order_Items.order_id == Orders.order_id)\
+                        .filter(Dishes.chef_id == chef['employee_id'])\
+                        .filter(Orders.status == 'Delivered')\
+                        .scalar()
+                    chef['total_orders'] = orders_result or 0
+                except Exception as e:
+                    chef['total_orders'] = 0
         
         return jsonify({"success": True, "chefs": featured_chefs}), 200
     except Exception as e:
@@ -1876,7 +2613,8 @@ def get_recent_orders():
                 email = payload.get('email')
                 
                 # Check if this is a customer (not employee)
-                if 'role' not in payload:
+                role = payload.get('role')
+                if role == 'Customer':
                     customer = Customers.query.filter_by(email=email).first()
                     if customer:
                         customer_id = customer.customer_id
@@ -1912,8 +2650,9 @@ def get_recent_orders():
                 'order_id': order.order_id,
                 'customer_name': customer_name,
                 'items_count': items_count,
-                'total_price': float(order.total_price),
-                'completion_time': order.order_time.isoformat() if order.order_time else None
+                'total': float(order.total_price),
+                'date': order.order_time.isoformat() if order.order_time else None,
+                'status': order.status
             })
         
         return jsonify({"success": True, "orders": orders_data}), 200
@@ -1927,184 +2666,664 @@ def get_recommendations():
         customer_id = None
         is_authenticated = False
         
-        if auth_header and auth_header.startswith('Bearer '):
-            token = auth_header.split(' ')[1]
+        if auth_header:
             try:
+                token = auth_header.split(' ')[1] if ' ' in auth_header else auth_header
                 payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
-                if payload.get('type') == 'customer':
-                    customer_id = payload.get('customer_id')
-                    is_authenticated = True
-            except jwt.ExpiredSignatureError:
-                pass  # Token expired, treat as unauthenticated
-            except jwt.InvalidTokenError:
-                pass  # Invalid token, treat as unauthenticated
+                email = payload.get('email')
+                
+                # Check if this is a customer (not employee)
+                role = payload.get('role')
+                if role == 'Customer':
+                    customer = Customers.query.filter_by(email=email).first()
+                    if customer:
+                        customer_id = customer.customer_id
+                        is_authenticated = True
+            except Exception as e:
+                # If token is invalid, treat as unauthenticated
+                pass
         
         if is_authenticated and customer_id:
-            # Personalized recommendations based on user's order history
-            
-            # Get most ordered dishes by this customer
-            most_ordered_query = db.session.query(
-                Dishes.dish_id,
-                Dishes.name,
-                Dishes.description,
-                Dishes.image_url,
-                Dishes.price,
-                db.func.count(Order_Items.dish_id).label('order_count'),
-                Employees.name.label('chef_name'),
-                Employees.profile_image_url
-            ).join(Order_Items, Dishes.dish_id == Order_Items.dish_id)\
-             .join(Orders, Order_Items.order_id == Orders.order_id)\
-             .join(Employees, Dishes.chef_id == Employees.employee_id)\
-             .filter(Orders.customer_id == customer_id)\
-             .filter(Orders.status == 'Delivered')\
-             .group_by(Dishes.dish_id, Dishes.name, Dishes.description, Dishes.image_url, Dishes.price, Employees.name, Employees.profile_image_url)\
-             .order_by(db.func.count(Order_Items.dish_id).desc())\
-             .limit(3)\
-             .all()
-            
-            most_ordered = [{
-                'id': row.dish_id,
-                'name': row.name,
-                'description': row.description,
-                'image': row.image_url,
-                'price': float(row.price),
-                'order_count': row.order_count,
-                'chef': {
-                    'name': row.chef_name,
-                    'profile_image_url': row.profile_image_url
-                }
-            } for row in most_ordered_query]
-            
-            # Get highest rated dishes by this customer
-            highest_rated_query = db.session.query(
-                Dishes.dish_id,
-                Dishes.name,
-                Dishes.description,
-                Dishes.image_url,
-                Dishes.price,
-                db.func.avg(Reviews.dish_rating).label('rating'),
-                db.func.count(Reviews.review_id).label('review_count'),
-                Employees.name.label('chef_name'),
-                Employees.profile_image_url
-            ).join(Order_Items, Dishes.dish_id == Order_Items.dish_id)\
-             .join(Orders, Order_Items.order_id == Orders.order_id)\
-             .join(Reviews, Orders.order_id == Reviews.order_id)\
-             .join(Employees, Dishes.chef_id == Employees.employee_id)\
-             .filter(Orders.customer_id == customer_id)\
-             .group_by(Dishes.dish_id, Dishes.name, Dishes.description, Dishes.image_url, Dishes.price, Employees.name, Employees.profile_image_url)\
-             .order_by(db.func.avg(Reviews.dish_rating).desc())\
-             .limit(3)\
-             .all()
-            
-            highest_rated = [{
-                'id': row.dish_id,
-                'name': row.name,
-                'description': row.description,
-                'image': row.image_url,
-                'price': float(row.price),
-                'rating': round(float(row.rating), 1),
-                'review_count': row.review_count,
-                'chef': {
-                    'name': row.chef_name,
-                    'profile_image_url': row.profile_image_url
-                }
-            } for row in highest_rated_query]
-            
-            return jsonify({
-                "success": True,
-                "recommendations": {
-                    "type": "personalized",
-                    "most_ordered": most_ordered,
-                    "highest_rated": highest_rated
-                }
-            }), 200
-            
+            # Check if customer has any orders
+            has_orders = Orders.query.filter_by(customer_id=customer_id).count() > 0
+            if has_orders:
+                return get_personalized_recommendations(customer_id)
+            else:
+                # New customers with no orders see general recommendations
+                return get_general_recommendations()
         else:
-            # General recommendations for visitors
-            
-            # Get most popular dishes (most ordered overall)
-            most_popular_query = db.session.query(
-                Dishes.dish_id,
-                Dishes.name,
-                Dishes.description,
-                Dishes.image_url,
-                Dishes.price,
-                db.func.count(Order_Items.dish_id).label('total_orders'),
-                Employees.name.label('chef_name'),
-                Employees.profile_image_url
-            ).join(Order_Items, Dishes.dish_id == Order_Items.dish_id)\
-             .join(Orders, Order_Items.order_id == Orders.order_id)\
-             .join(Employees, Dishes.chef_id == Employees.employee_id)\
-             .filter(Orders.status == 'Delivered')\
-             .group_by(Dishes.dish_id, Dishes.name, Dishes.description, Dishes.image_url, Dishes.price, Employees.name, Employees.profile_image_url)\
-             .order_by(db.func.count(Order_Items.dish_id).desc())\
-             .limit(3)\
-             .all()
-            
-            most_popular = [{
-                'id': row.dish_id,
-                'name': row.name,
-                'description': row.description,
-                'image': row.image_url,
-                'price': float(row.price),
-                'total_orders': row.total_orders,
-                'chef': {
-                    'name': row.chef_name,
-                    'profile_image_url': row.profile_image_url
-                }
-            } for row in most_popular_query]
-            
-            # Get top rated dishes overall
-            top_rated_query = db.session.query(
-                Dishes.dish_id,
-                Dishes.name,
-                Dishes.description,
-                Dishes.image_url,
-                Dishes.price,
-                db.func.avg(Reviews.dish_rating).label('rating'),
-                db.func.count(Reviews.review_id).label('review_count'),
-                Employees.name.label('chef_name'),
-                Employees.profile_image_url
-            ).join(Order_Items, Dishes.dish_id == Order_Items.dish_id)\
-             .join(Reviews, Order_Items.order_id == Reviews.order_id)\
-             .join(Employees, Dishes.chef_id == Employees.employee_id)\
-             .group_by(Dishes.dish_id, Dishes.name, Dishes.description, Dishes.image_url, Dishes.price, Employees.name, Employees.profile_image_url)\
-             .order_by(db.func.avg(Reviews.dish_rating).desc())\
-             .limit(3)\
-             .all()
-            
-            top_rated = [{
-                'id': row.dish_id,
-                'name': row.name,
-                'description': row.description,
-                'image': row.image_url,
-                'price': float(row.price),
-                'rating': round(float(row.rating), 1),
-                'review_count': row.review_count,
-                'chef': {
-                    'name': row.chef_name,
-                    'profile_image_url': row.profile_image_url
-                }
-            } for row in top_rated_query]
-            
-            return jsonify({
-                "success": True,
-                "recommendations": {
-                    "type": "general",
-                    "most_popular": most_popular,
-                    "top_rated": top_rated
-                }
-            }), 200
+            return get_general_recommendations()
             
     except Exception as e:
         print(f"Error in get_recommendations: {e}")
         return jsonify({"success": False, "message": "Failed to fetch recommendations"}), 500
 
+<<<<<<< Updated upstream
+=======
+
+def get_personalized_recommendations(customer_id):
+    """Get personalized recommendations based on user's order history"""
+    # Get most ordered dishes by this customer
+    most_ordered = get_customer_most_ordered(customer_id)
+    
+    # Get highest rated dishes by this customer
+    highest_rated = get_customer_highest_rated(customer_id)
+    
+    return jsonify({
+        "success": True,
+        "recommendations": {
+            "type": "personalized",
+            "most_ordered": most_ordered,
+            "highest_rated": highest_rated
+        }
+    }), 200
+
+
+def get_general_recommendations():
+    """Get general recommendations for visitors - most popular and top rated dishes"""
+    # Get most popular dishes overall
+    most_popular = get_most_popular_dishes()
+    
+    # Get top rated dishes overall
+    top_rated = get_top_rated_dishes()
+    
+    return jsonify({
+        "success": True,
+        "recommendations": {
+            "type": "general",
+            "most_popular": most_popular,
+            "top_rated": top_rated
+        }
+    }), 200
+
+
+def get_customer_most_ordered(customer_id, limit=3):
+    """Get most ordered dishes by a specific customer"""
+    query = db.session.query(
+        Dishes.dish_id, Dishes.name, Dishes.description, Dishes.image_url, Dishes.price,
+        db.func.count(Order_Items.dish_id).label('order_count'),
+        Employees.name.label('chef_name'), Employees.profile_image_url
+    ).join(Order_Items, Dishes.dish_id == Order_Items.dish_id)\
+     .join(Orders, Order_Items.order_id == Orders.order_id)\
+     .join(Employees, Dishes.chef_id == Employees.employee_id)\
+     .filter(Orders.customer_id == customer_id)\
+     .filter(Orders.status == 'Delivered')\
+     .group_by(Dishes.dish_id, Dishes.name, Dishes.description, Dishes.image_url, Dishes.price, Employees.name, Employees.profile_image_url)\
+     .order_by(db.func.count(Order_Items.dish_id).desc())\
+     .limit(limit)\
+     .all()
+    
+    return format_dish_results(query, include_order_count=True)
+
+
+def get_customer_highest_rated(customer_id, limit=3):
+    """Get highest rated dishes by a specific customer"""
+    query = db.session.query(
+        Dishes.dish_id, Dishes.name, Dishes.description, Dishes.image_url, Dishes.price,
+        db.func.avg(Reviews.dish_rating).label('rating'),
+        db.func.count(Reviews.review_id).label('review_count'),
+        Employees.name.label('chef_name'), Employees.profile_image_url
+    ).join(Order_Items, Dishes.dish_id == Order_Items.dish_id)\
+     .join(Orders, Order_Items.order_id == Orders.order_id)\
+     .join(Reviews, Orders.order_id == Reviews.order_id)\
+     .join(Employees, Dishes.chef_id == Employees.employee_id)\
+     .filter(Orders.customer_id == customer_id)\
+     .group_by(Dishes.dish_id, Dishes.name, Dishes.description, Dishes.image_url, Dishes.price, Employees.name, Employees.profile_image_url)\
+     .order_by(db.func.avg(Reviews.dish_rating).desc())\
+     .limit(limit)\
+     .all()
+    
+    return format_dish_results(query, include_rating=True)
+
+
+def get_most_popular_dishes(limit=3, include_vip=False):
+    """Get most popular dishes overall"""
+    query = db.session.query(
+        Dishes.dish_id, Dishes.name, Dishes.description, Dishes.image_url, Dishes.price,
+        db.func.count(Order_Items.dish_id).label('total_orders'),
+        db.func.avg(Reviews.dish_rating).label('rating'),
+        db.func.count(Reviews.review_id).label('review_count'),
+        Employees.name.label('chef_name'), Employees.profile_image_url
+    ).join(Order_Items, Dishes.dish_id == Order_Items.dish_id)\
+     .join(Orders, Order_Items.order_id == Orders.order_id)\
+     .outerjoin(Reviews, Order_Items.order_id == Reviews.order_id)\
+     .join(Employees, Dishes.chef_id == Employees.employee_id)\
+     .filter(Orders.status == 'Delivered')
+    
+    if not include_vip:
+        query = query.filter(Dishes.is_vip == False)
+    
+    query = query.group_by(Dishes.dish_id, Dishes.name, Dishes.description, Dishes.image_url, Dishes.price, Employees.name, Employees.profile_image_url)\
+     .order_by(db.func.count(Order_Items.dish_id).desc())\
+     .limit(limit)\
+     .all()
+    
+    return format_dish_results(query, include_order_count=True, include_rating=True)
+
+
+def get_top_rated_dishes(limit=3, include_vip=False):
+    """Get top rated dishes overall"""
+    query = db.session.query(
+        Dishes.dish_id, Dishes.name, Dishes.description, Dishes.image_url, Dishes.price,
+        db.func.avg(Reviews.dish_rating).label('rating'),
+        db.func.count(Reviews.review_id).label('review_count'),
+        Employees.name.label('chef_name'), Employees.profile_image_url
+    ).join(Order_Items, Dishes.dish_id == Order_Items.dish_id)\
+     .join(Reviews, Order_Items.order_id == Reviews.order_id)\
+     .join(Employees, Dishes.chef_id == Employees.employee_id)
+    
+    if not include_vip:
+        query = query.filter(Dishes.is_vip == False)
+    
+    query = query.group_by(Dishes.dish_id, Dishes.name, Dishes.description, Dishes.image_url, Dishes.price, Employees.name, Employees.profile_image_url)\
+     .order_by(db.func.avg(Reviews.dish_rating).desc())\
+     .limit(limit)\
+     .all()
+    
+    return format_dish_results(query, include_rating=True)
+
+
+def format_dish_results(query_results, include_order_count=False, include_rating=False):
+    """Format dish query results into consistent structure"""
+    results = []
+    for row in query_results:
+        dish_data = {
+            'id': row.dish_id,
+            'name': row.name,
+            'description': row.description,
+            'image': row.image_url,
+            'price': float(row.price),
+            'chef': {
+                'name': row.chef_name,
+                'profile_image_url': row.profile_image_url
+            }
+        }
+        
+        if include_order_count and hasattr(row, 'order_count'):
+            dish_data['order_count'] = row.order_count
+        elif include_order_count and hasattr(row, 'total_orders'):
+            dish_data['total_orders'] = row.total_orders
+            
+        if include_rating and hasattr(row, 'rating') and row.rating:
+            dish_data['rating'] = round(float(row.rating), 1)
+            dish_data['review_count'] = getattr(row, 'review_count', 0)
+        
+        results.append(dish_data)
+    return results
+
+# Forum API endpoints
+
+# Report forum content (post or comment)
+@app.route('/api/forum/reports', methods=['POST'])
+def report_forum_content():
+    auth_header = request.headers.get('Authorization')
+    if not auth_header:
+        return jsonify({"success": False, "message": "Authentication required"}), 401
+    
+    try:
+        token = auth_header.split(' ')[1] if ' ' in auth_header else auth_header
+        payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+        customer = Customers.query.filter_by(email=payload.get('email')).first()
+        
+        if not customer:
+            return jsonify({"success": False, "message": "User not found"}), 404
+        
+        data = request.get_json()
+        new_report = Forum_Reports(
+            reporter_id=customer.customer_id,
+            content_type=data['contentType'],
+            content_id=int(data['contentId']),
+            reason=data['reason']
+        )
+        db.session.add(new_report)
+        db.session.commit()
+        
+        return jsonify({"success": True, "message": "Report submitted successfully"}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": "Failed to submit report"}), 500
+
+# Get all forum reports (Manager only)
+@app.route('/api/manager/forum-reports', methods=['GET'])
+@require_role('Manager')
+def get_forum_reports():
+    try:
+        reports = Forum_Reports.query.order_by(Forum_Reports.created_at.desc()).all()
+        reports_data = []
+        
+        for report in reports:
+            reporter = Customers.query.get(report.reporter_id)
+            reviewer = Employees.query.get(report.reviewed_by) if report.reviewed_by else None
+            
+            # Get content details
+            content_info = {}
+            if report.content_type == 'post':
+                post = Forum_Posts.query.get(report.content_id)
+                if post:
+                    content_info = {
+                        "title": post.title,
+                        "content": post.content[:100] + "..." if len(post.content) > 100 else post.content,
+                        "author": Customers.query.get(post.customer_id).username if Customers.query.get(post.customer_id) else "Unknown"
+                    }
+            elif report.content_type == 'comment':
+                comment = Forum_Comments.query.get(report.content_id)
+                if comment:
+                    content_info = {
+                        "content": comment.content,
+                        "author": Customers.query.get(comment.customer_id).username if Customers.query.get(comment.customer_id) else "Unknown"
+                    }
+            
+            reports_data.append({
+                "report_id": report.report_id,
+                "reporter_name": reporter.username if reporter else "Unknown",
+                "content_type": report.content_type,
+                "content_info": content_info,
+                "reason": report.reason,
+                "status": report.status,
+                "created_at": report.created_at.isoformat() if report.created_at else None,
+                "reviewed_at": report.reviewed_at.isoformat() if report.reviewed_at else None,
+                "reviewed_by": reviewer.name if reviewer else None,
+                "appealed_at": report.appealed_at.isoformat() if report.appealed_at else None,
+                "appeal_message": report.appeal_message
+            })
+        
+        return jsonify({"success": True, "reports": reports_data}), 200
+    except Exception as e:
+        return jsonify({"success": False, "message": "Failed to fetch reports"}), 500
+
+# Update report status (Manager only)
+@app.route('/api/manager/forum-reports/<int:report_id>', methods=['PUT'])
+@require_role('Manager')
+def update_report_status(report_id):
+    auth_header = request.headers.get('Authorization')
+    if not auth_header:
+        return jsonify({"success": False, "message": "Authentication required"}), 401
+    
+    try:
+        # Get manager info
+        token = auth_header.split(' ')[1] if ' ' in auth_header else auth_header
+        payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+        manager = Employees.query.filter_by(email=payload.get('email')).first()
+        
+        if not manager or manager.role != 'Manager':
+            return jsonify({"success": False, "message": "Manager access required"}), 403
+        
+        data = request.get_json()
+        report = Forum_Reports.query.get(report_id)
+        
+        if not report:
+            return jsonify({"success": False, "message": "Report not found"}), 404
+        
+        report.status = data.get('status', report.status)
+        if report.status in ['reviewed', 'resolved', 'notified']:
+            report.reviewed_at = datetime.now(timezone.utc)
+            report.reviewed_by = manager.employee_id
+            
+            # Check if reporter is VIP (for double weighting)
+            reporter_is_vip = False
+            reporter_customer = Customers.query.get(report.reporter_id)
+            if reporter_customer:
+                vip_record = VIP_Customers.query.filter_by(customer_id=reporter_customer.customer_id).first()
+                reporter_is_vip = vip_record is not None
+            weight = 2 if reporter_is_vip else 1
+            
+            # If resolving the report (meaning it was valid), warn the accused
+            if report.status == 'resolved':
+                # Find the accused user
+                accused_user_id = None
+                if report.content_type == 'post':
+                    post = Forum_Posts.query.get(report.content_id)
+                    if post:
+                        accused_user_id = post.customer_id
+                elif report.content_type == 'comment':
+                    comment = Forum_Comments.query.get(report.content_id)
+                    if comment:
+                        accused_user_id = comment.customer_id
+                
+                if accused_user_id:
+                    accused_customer = Customers.query.get(accused_user_id)
+                    if accused_customer:
+                        # Add warnings based on weight
+                        accused_customer.warning_count += weight
+                        
+                        # Auto-demote VIP customers after 2 warnings
+                        if accused_customer.warning_count >= 2:
+                            vip_record = VIP_Customers.query.filter_by(customer_id=accused_customer.customer_id).first()
+                            if vip_record:
+                                db.session.delete(vip_record)
+                                accused_customer.warning_count = 0
+                        
+                        # Auto-blacklist after 3 warnings
+                        if accused_customer.warning_count >= 3:
+                            accused_customer.is_blacklisted = True
+                        
+                        # Create warning records
+                        for _ in range(weight):
+                            warning = Warnings(
+                                customer_id=accused_user_id,
+                                reason=f"Warning for reported {report.content_type} (report resolved)",
+                                created_at=datetime.now(timezone.utc)
+                            )
+                            db.session.add(warning)
+            
+            # If notifying accused party, create a notification
+            if report.status == 'notified':
+                # Find the accused user (author of the reported content)
+                accused_user_id = None
+                if report.content_type == 'post':
+                    post = Forum_Posts.query.get(report.content_id)
+                    if post:
+                        accused_user_id = post.customer_id
+                elif report.content_type == 'comment':
+                    comment = Forum_Comments.query.get(report.content_id)
+                    if comment:
+                        accused_user_id = comment.customer_id
+                
+                if accused_user_id:
+                    # Create notification for accused user
+                    print(f"DEBUG: Creating notification for user {accused_user_id} about {report.content_type} report")
+                    notification = User_Notifications(
+                        user_id=accused_user_id,
+                        title="Forum Content Report",
+                        message=f"Your {report.content_type} has been reported for: {report.reason}. A manager will review this matter. You may be contacted for more information.",
+                        type="forum_report",
+                        related_id=report.report_id
+                    )
+                    db.session.add(notification)
+                    print(f"DEBUG: Notification added to session")
+        
+        db.session.commit()
+        
+        return jsonify({"success": True, "message": "Report updated successfully"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": "Failed to update report"}), 500
+
+# Appeal a forum report (by accused party)
+@app.route('/api/forum-reports/<int:report_id>/appeal', methods=['POST'])
+def appeal_forum_report(report_id):
+    auth_header = request.headers.get('Authorization')
+    if not auth_header:
+        return jsonify({"success": False, "message": "Authentication required"}), 401
+    
+    try:
+        token = auth_header.split(' ')[1] if ' ' in auth_header else auth_header
+        payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+        user_email = payload.get('email')
+        
+        user = Customers.query.filter_by(email=user_email).first()
+        if not user:
+            return jsonify({"success": False, "message": "User not found"}), 404
+        
+        report = Forum_Reports.query.get(report_id)
+        if not report:
+            return jsonify({"success": False, "message": "Report not found"}), 404
+        
+        # Check if user is the accused (author of the reported content)
+        accused_user_id = None
+        if report.content_type == 'post':
+            post = Forum_Posts.query.get(report.content_id)
+            if post:
+                accused_user_id = post.customer_id
+        elif report.content_type == 'comment':
+            comment = Forum_Comments.query.get(report.content_id)
+            if comment:
+                accused_user_id = comment.customer_id
+        
+        if accused_user_id != user.customer_id:
+            return jsonify({"success": False, "message": "You are not authorized to appeal this report"}), 403
+        
+        # Check if report status allows appeal (notified)
+        if report.status != 'notified':
+            return jsonify({"success": False, "message": "Report cannot be appealed at this stage"}), 400
+        
+        data = request.get_json()
+        appeal_message = data.get('appeal_message', '').strip()
+        if not appeal_message:
+            return jsonify({"success": False, "message": "Appeal message is required"}), 400
+        
+        report.status = 'appealed'
+        report.appeal_message = appeal_message
+        report.appealed_at = datetime.now(timezone.utc)
+        
+        # Mark the related notification as read
+        try:
+            notification = User_Notifications.query.filter_by(
+                related_id=report_id,
+                type='forum_report'
+            ).first()
+            
+            if notification:
+                notification.is_read = True
+        except Exception as e:
+            print(f"Error marking notification as read: {e}")
+        
+        db.session.commit()
+        
+        return jsonify({"success": True, "message": "Appeal submitted successfully"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": "Failed to submit appeal"}), 500
+
+# Review forum report appeal (Manager only)
+@app.route('/api/manager/forum-reports/<int:report_id>/review-appeal', methods=['POST'])
+@require_role('Manager')
+def review_forum_report_appeal(report_id):
+    auth_header = request.headers.get('Authorization')
+    if not auth_header:
+        return jsonify({"success": False, "message": "Authentication required"}), 401
+    
+    try:
+        token = auth_header.split(' ')[1] if ' ' in auth_header else auth_header
+        payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+        manager = Employees.query.filter_by(email=payload.get('email')).first()
+        
+        if not manager or manager.role != 'Manager':
+            return jsonify({"success": False, "message": "Manager access required"}), 403
+        
+        data = request.get_json()
+        decision = data.get('decision')  # 'repeal' or 'uphold'
+        if decision not in ['repeal', 'uphold']:
+            return jsonify({"success": False, "message": "Invalid decision"}), 400
+        
+        report = Forum_Reports.query.get(report_id)
+        if not report:
+            return jsonify({"success": False, "message": "Report not found"}), 404
+        
+        if report.status != 'appealed':
+            return jsonify({"success": False, "message": "Report is not in appealed status"}), 400
+        
+        if decision == 'repeal':
+            report.status = 'repealed'
+            # Add 2 warnings to the reporter for abusing the report system
+            reporter = Customers.query.get(report.reporter_id)
+            if reporter:
+                # Increment warning count by 2
+                reporter.warning_count += 2
+                
+                # Auto-demote VIP customers after 2 warnings
+                if reporter.warning_count >= 2:
+                    vip_record = VIP_Customers.query.filter_by(customer_id=reporter.customer_id).first()
+                    if vip_record:
+                        db.session.delete(vip_record)
+                        reporter.warning_count = 0
+                
+                # Auto-blacklist after 3 warnings
+                if reporter.warning_count >= 3:
+                    reporter.is_blacklisted = True
+                
+                # Create two warning records
+                for _ in range(2):
+                    warning = Warnings(
+                        customer_id=report.reporter_id,
+                        reason="Warning for abusing forum report system (appeal repealed)",
+                        created_at=datetime.now(timezone.utc)
+                    )
+                    db.session.add(warning)
+        elif decision == 'uphold':
+            report.status = 'upheld'
+            # Add 1 warning to the accused (author of the reported content)
+            try:
+                # Get the author based on content_type and content_id
+                accused_username = None
+                if report.content_type == 'post':
+                    post = Forum_Posts.query.get(report.content_id)
+                    if post:
+                        customer = Customers.query.get(post.customer_id)
+                        accused_username = customer.username if customer else None
+                elif report.content_type == 'comment':
+                    comment = Forum_Comments.query.get(report.content_id)
+                    if comment:
+                        customer = Customers.query.get(comment.customer_id)
+                        accused_username = customer.username if customer else None
+                
+                if accused_username:
+                    accused = Customers.query.filter_by(username=accused_username).first()
+                    if accused:
+                        accused.warning_count += 1
+                        
+                        # Auto-demote VIP customers after 2 warnings
+                        if accused.warning_count >= 2:
+                            vip_record = VIP_Customers.query.filter_by(customer_id=accused.customer_id).first()
+                            if vip_record:
+                                db.session.delete(vip_record)
+                        
+                        # Auto-blacklist after 3 warnings
+                        if accused.warning_count >= 3:
+                            accused.is_blacklisted = True
+                        
+                        # Create a warning record
+                        warning = Warnings(
+                            customer_id=accused.customer_id,
+                            reason="Warning for upheld forum report appeal",
+                            created_at=datetime.now(timezone.utc)
+                        )
+                        db.session.add(warning)
+            except Exception as e:
+                print(f"Error processing upheld appeal: {e}")
+                return jsonify({"success": False, "message": "Error processing appeal"}), 500
+                accused = Customers.query.filter_by(username=accused_username).first()
+                if accused:
+                    accused.warning_count += 1
+                    
+                    # Auto-demote VIP customers after 2 warnings
+                    if accused.warning_count >= 2:
+                        vip_record = VIP_Customers.query.filter_by(customer_id=accused.customer_id).first()
+                        if vip_record:
+                            db.session.delete(vip_record)
+                            accused.warning_count = 0
+                    
+                    # Auto-blacklist after 3 warnings
+                    if accused.warning_count >= 3:
+                        accused.is_blacklisted = True
+                    
+                    # Create a warning record
+                    warning = Warnings(
+                        customer_id=accused.customer_id,
+                        reason="Warning for upheld forum report appeal",
+                        created_at=datetime.now(timezone.utc)
+                    )
+                    db.session.add(warning)
+        
+        report.reviewed_at = datetime.now(timezone.utc)
+        report.reviewed_by = manager.employee_id
+        
+        db.session.commit()
+        
+        return jsonify({"success": True, "message": f"Appeal {decision}ed successfully"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": "Failed to review appeal"}), 500
+
+# Get user notifications
+@app.route('/api/user/notifications', methods=['GET'])
+def get_user_notifications():
+    auth_header = request.headers.get('Authorization')
+    if not auth_header:
+        return jsonify({"success": False, "message": "Authentication required"}), 401
+    
+    try:
+        token = auth_header.split(' ')[1] if ' ' in auth_header else auth_header
+        payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+        user_email = payload.get('email')
+        
+        # Try to find user as customer first
+        user = Customers.query.filter_by(email=user_email).first()
+        user_id = user.customer_id if user else None
+        user_type = 'customer' if user else None
+        
+        # If not found as customer, try as employee
+        if not user:
+            user = Employees.query.filter_by(email=user_email).first()
+            user_id = user.employee_id if user else None
+            user_type = 'employee' if user else None
+        
+        if not user:
+            return jsonify({"success": False, "message": "User not found"}), 404
+        
+        print(f"DEBUG: User {user_id} ({user_email}) requesting notifications")
+        notifications = User_Notifications.query.filter_by(user_id=user_id).order_by(User_Notifications.created_at.desc()).all()
+        print(f"DEBUG: Found {len(notifications)} notifications for user {user_id}")
+        
+        notifications_data = [{
+            "notification_id": n.notification_id,
+            "title": n.title,
+            "message": n.message,
+            "type": n.type,
+            "related_id": n.related_id,
+            "is_read": n.is_read,
+            "created_at": n.created_at.isoformat() if n.created_at else None
+        } for n in notifications]
+        
+        return jsonify({"success": True, "notifications": notifications_data}), 200
+    except Exception as e:
+        return jsonify({"success": False, "message": "Failed to get notifications"}), 500
+
+# Mark notification as read
+@app.route('/api/user/notifications/<int:notification_id>/read', methods=['PUT'])
+def mark_notification_read(notification_id):
+    auth_header = request.headers.get('Authorization')
+    if not auth_header:
+        return jsonify({"success": False, "message": "Authentication required"}), 401
+    
+    try:
+        token = auth_header.split(' ')[1] if ' ' in auth_header else auth_header
+        payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+        user_email = payload.get('email')
+        
+        # Try to find user as customer first
+        user = Customers.query.filter_by(email=user_email).first()
+        user_id = user.customer_id if user else None
+        
+        # If not found as customer, try as employee
+        if not user:
+            user = Employees.query.filter_by(email=user_email).first()
+            user_id = user.employee_id if user else None
+        
+        if not user:
+            return jsonify({"success": False, "message": "User not found"}), 404
+        
+        notification = User_Notifications.query.filter_by(
+            notification_id=notification_id, 
+            user_id=user_id
+        ).first()
+        
+        if not notification:
+            return jsonify({"success": False, "message": "Notification not found"}), 404
+        
+        notification.is_read = True
+        db.session.commit()
+        
+        return jsonify({"success": True, "message": "Notification marked as read"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": "Failed to mark notification as read"}), 500
+
+>>>>>>> Stashed changes
 
 # Get all forum posts
 @app.route('/api/forum/posts', methods=['GET'])
 def get_forum_posts():
-    # Check if user is logged in (optional, to check 'isLiked')
     current_user_id = None
     auth_header = request.headers.get('Authorization')
     if auth_header:
@@ -2123,11 +3342,18 @@ def get_forum_posts():
         likes_count = Forum_Likes.query.filter_by(post_id=post.post_id).count()
         # Count comments
         comments_count = Forum_Comments.query.filter_by(post_id=post.post_id).count()
+        # Count compliments
+        compliments_count = Forum_Post_Compliments.query.filter_by(post_id=post.post_id).count()
         # Check if current user liked this post
         is_liked = False
         if current_user_id:
             if Forum_Likes.query.filter_by(post_id=post.post_id, customer_id=current_user_id).first():
                 is_liked = True
+        # Check if current user complimented this post
+        is_complimented = False
+        if current_user_id:
+            if Forum_Post_Compliments.query.filter_by(post_id=post.post_id, customer_id=current_user_id).first():
+                is_complimented = True
 
         result.append({
             "id": str(post.post_id),
@@ -2136,9 +3362,11 @@ def get_forum_posts():
             "content": post.content,
             "category": post.category,
             "likes": likes_count,
+            "compliments": compliments_count,
             "commentCount": comments_count,
             "createdAt": post.created_at.isoformat(),
-            "isLiked": is_liked
+            "isLiked": is_liked,
+            "isComplimented": is_complimented
         })
     
     return jsonify({"success": True, "posts": result}), 200
@@ -2192,9 +3420,111 @@ def like_forum_post(post_id):
     db.session.commit()
     return jsonify({"success": True, "action": action}), 200
 
+# Toggle Like on a comment
+@app.route('/api/forum/comments/<int:comment_id>/like', methods=['POST'])
+def like_forum_comment(comment_id):
+    auth_header = request.headers.get('Authorization')
+    if not auth_header: return jsonify({"success": False, "message": "Unauthorized"}), 401
+    
+    try:
+        token = auth_header.split(' ')[1]
+        payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+        user = Customers.query.filter_by(email=payload.get('email')).first()
+    except: return jsonify({"success": False, "message": "Invalid token"}), 401
+
+    existing_like = Forum_Comment_Likes.query.filter_by(comment_id=comment_id, customer_id=user.customer_id).first()
+    
+    if existing_like:
+        db.session.delete(existing_like) # Unlike
+        action = "unliked"
+    else:
+        new_like = Forum_Comment_Likes(comment_id=comment_id, customer_id=user.customer_id)
+        db.session.add(new_like) # Like
+        action = "liked"
+    
+    db.session.commit()
+    return jsonify({"success": True, "action": action}), 200
+
+# Give compliment to a post (one-time, decreases warnings by 1 if > 0)
+@app.route('/api/forum/posts/<int:post_id>/compliment', methods=['POST'])
+def compliment_forum_post(post_id):
+    auth_header = request.headers.get('Authorization')
+    if not auth_header: return jsonify({"success": False, "message": "Unauthorized"}), 401
+    
+    try:
+        token = auth_header.split(' ')[1]
+        payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+        user = Customers.query.filter_by(email=payload.get('email')).first()
+    except: return jsonify({"success": False, "message": "Invalid token"}), 401
+
+    # Check if already complimented
+    existing = Forum_Post_Compliments.query.filter_by(post_id=post_id, customer_id=user.customer_id).first()
+    if existing:
+        return jsonify({"success": False, "message": "Already complimented"}), 400
+
+    # Decrease warnings of poster
+    post = Forum_Posts.query.get(post_id)
+    if post:
+        poster = Customers.query.get(post.customer_id)
+        if poster and poster.warning_count > 0:
+            poster.warning_count -= 1
+            db.session.add(poster)
+    
+    # Save compliment
+    new_compliment = Forum_Post_Compliments(post_id=post_id, customer_id=user.customer_id)
+    db.session.add(new_compliment)
+    
+    db.session.commit()
+    return jsonify({"success": True, "message": "Compliment given"}), 200
+
+# Give compliment to a comment (one-time, decreases warnings by 1 if > 0)
+@app.route('/api/forum/comments/<int:comment_id>/compliment', methods=['POST'])
+def compliment_forum_comment(comment_id):
+    auth_header = request.headers.get('Authorization')
+    if not auth_header: return jsonify({"success": False, "message": "Unauthorized"}), 401
+    
+    try:
+        token = auth_header.split(' ')[1]
+        payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+        user = Customers.query.filter_by(email=payload.get('email')).first()
+    except: return jsonify({"success": False, "message": "Invalid token"}), 401
+
+    # Check if already complimented
+    existing = Forum_Comment_Compliments.query.filter_by(comment_id=comment_id, customer_id=user.customer_id).first()
+    if existing:
+        return jsonify({"success": False, "message": "Already complimented"}), 400
+
+    # Decrease warnings of commenter
+    comment = Forum_Comments.query.get(comment_id)
+    if comment:
+        commenter = Customers.query.get(comment.customer_id)
+        if commenter and commenter.warning_count > 0:
+            commenter.warning_count -= 1
+            db.session.add(commenter)
+    
+    # Save compliment
+    new_compliment = Forum_Comment_Compliments(comment_id=comment_id, customer_id=user.customer_id)
+    db.session.add(new_compliment)
+    
+    db.session.commit()
+    return jsonify({"success": True, "message": "Compliment given"}), 200
+
 # Get comments for a post
 @app.route('/api/forum/posts/<int:post_id>/comments', methods=['GET'])
 def get_post_comments(post_id):
+    # Get current user if authenticated
+    current_user_id = None
+    auth_header = request.headers.get('Authorization')
+    if auth_header:
+        try:
+            token = auth_header.split(' ')[1]
+            payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+            user = Customers.query.filter_by(email=payload.get('email')).first()
+            if user:
+                current_user_id = user.customer_id
+        except:
+            pass
+    
     comments = db.session.query(Forum_Comments, Customers.username)\
         .join(Customers)\
         .filter(Forum_Comments.post_id == post_id)\
@@ -2203,12 +3533,33 @@ def get_post_comments(post_id):
         
     result = []
     for comment, author in comments:
+        # Count likes
+        likes_count = Forum_Comment_Likes.query.filter_by(comment_id=comment.comment_id).count()
+        # Count compliments
+        compliments_count = Forum_Comment_Compliments.query.filter_by(comment_id=comment.comment_id).count()
+        
+        # Check if current user liked this comment
+        is_liked = False
+        if current_user_id:
+            if Forum_Comment_Likes.query.filter_by(comment_id=comment.comment_id, customer_id=current_user_id).first():
+                is_liked = True
+        
+        # Check if current user complimented this comment
+        is_complimented = False
+        if current_user_id:
+            if Forum_Comment_Compliments.query.filter_by(comment_id=comment.comment_id, customer_id=current_user_id).first():
+                is_complimented = True
+        
         result.append({
             "id": str(comment.comment_id),
             "postId": str(comment.post_id),
             "authorName": author,
             "content": comment.content,
-            "createdAt": comment.created_at.isoformat()
+            "createdAt": comment.created_at.isoformat(),
+            "likes": likes_count,
+            "compliments": compliments_count,
+            "isLiked": is_liked,
+            "isComplimented": is_complimented
         })
     return jsonify({"success": True, "comments": result}), 200
 
@@ -2344,6 +3695,9 @@ def search_food_by_image():
 
     # 2. Call Gemini Vision API
     try:
+        if not GOOGLE_AVAILABLE:
+            return jsonify({"success": False, "message": "AI features are not available"}), 503
+            
         GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY')
         if not GOOGLE_API_KEY:
             return jsonify({"success": False, "message": "Server API Key missing"}), 500
@@ -2373,19 +3727,47 @@ def search_food_by_image():
             return jsonify({"success": False, "message": "Multiple foods detected. Please upload a photo of a single dish."}), 400
 
         # 4. Search Database for matches
-        # We search for dishes where the name contains the identified keyword (Case insensitive)
-        search_term = f"%{result_text}%"
-        matched_dishes = Dishes.query.filter(Dishes.name.ilike(search_term)).all()
+        print(f"[Image Search] AI identified: '{result_text}'")
+        
+        # Get all dishes for reference
+        all_dishes = Dishes.query.all()
+        print(f"[Image Search] Total dishes in DB: {len(all_dishes)}")
+        
+        # Simple but effective search: try multiple variations
+        search_terms = [
+            result_text.lower(),
+            result_text.lower().replace(' ', ''),  # Remove spaces
+            result_text.lower().split()[0] if ' ' in result_text else result_text.lower()  # First word only
+        ]
+        
+        matched_dishes = set()
+        
+        for term in search_terms:
+            search_pattern = f"%{term}%"
+            
+            # Search in names
+            name_matches = Dishes.query.filter(Dishes.name.ilike(search_pattern)).all()
+            for dish in name_matches:
+                matched_dishes.add(dish)
+            
+            # Search in descriptions
+            desc_matches = Dishes.query.filter(Dishes.description.ilike(search_pattern)).all()
+            for dish in desc_matches:
+                matched_dishes.add(dish)
+        
+        matched_dishes = list(matched_dishes)
+        print(f"[Image Search] Found {len(matched_dishes)} matches")
 
         if not matched_dishes:
-            # Fallback: Try searching description if name fails
-            matched_dishes = Dishes.query.filter(Dishes.description.ilike(search_term)).all()
-
-        if not matched_dishes:
+            # Get some sample dishes to suggest alternatives
+            sample_dishes = Dishes.query.limit(3).all()
+            suggestions = [dish.name for dish in sample_dishes]
+            
             return jsonify({
                 "success": False, 
-                "message": f"Looks like {result_text}, but we don't have an exact match on our menu.",
-                "identified_name": result_text
+                "message": f"I identified '{result_text}' in your image, but we don't have that exact dish. Try searching our menu for similar items!",
+                "identified_name": result_text,
+                "suggestions": suggestions
             }), 404
 
         # 5. Return Results
@@ -2430,12 +3812,6 @@ def rate_ai_answer():
             if user: customer_id = user.customer_id
         except: pass
 
-    # If guest, use a placeholder or handle error (DB requires customer_id? Check model)
-    # Your model says: customer_id nullable=False. So guests cannot rate? 
-    # For now, if no user, we return 401.
-    if not customer_id:
-        return jsonify({"success": False, "message": "Please login to rate answers."}), 401
-
     data = request.get_json()
     question = data.get('question')
     answer = data.get('answer')
@@ -2474,15 +3850,14 @@ def rate_ai_answer():
             if kb_entry:
                 # Soft delete from KB
                 kb_entry.is_deleted = True
-                # Optional: You could add logic here to flag the 'author' if needed
             else:
                 # If it's not in KB, we don't need to delete anything.
                 # But we can't save the rating to DB because kb_id is required.
                 return jsonify({"success": True, "message": "Feedback received (Low rating logged)."}), 200
 
         # 4. Save Rating Record
-        # We can only save to AI_Ratings if we have a valid kb_id
-        if kb_entry:
+        # We can only save to AI_Ratings if we have a valid kb_id and a logged-in user
+        if kb_entry and customer_id:
             new_rating = AI_Ratings(
                 kb_id=kb_entry.kb_id,
                 customer_id=customer_id,
@@ -2493,6 +3868,10 @@ def rate_ai_answer():
             db.session.add(new_rating)
             db.session.commit()
             return jsonify({"success": True, "message": "Rating saved and KB updated."}), 200
+        elif kb_entry:
+            # Guest user: KB updated but rating not saved
+            db.session.commit()
+            return jsonify({"success": True, "message": "Feedback received and KB updated."}), 200
         else:
             # If we are here, it means Rating is 1-4 AND it wasn't in KB.
             # We cannot save to DB due to constraints, but we acknowledge the user.
@@ -2579,6 +3958,692 @@ def add_kb_entry():
     except Exception as e:
         print(e)
         return jsonify({"success": False, "message": "Database error"}), 500
+
+@app.route('/api/manager/kb/<int:kb_id>', methods=['DELETE'])
+def delete_kb_entry(kb_id):
+    # Verify Manager Role
+    auth_header = request.headers.get('Authorization')
+    if not auth_header: return jsonify({"success": False}), 401
+    try:
+        token = auth_header.split(' ')[1]
+        payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+        if payload.get('role') != 'Manager': return jsonify({"success": False}), 403
+    except: return jsonify({"success": False}), 401
+
+    # Find and soft delete the KB entry
+    kb_entry = AI_Knowledge_Base.query.get(kb_id)
+    if not kb_entry:
+        return jsonify({"success": False, "message": "Knowledge entry not found"}), 404
+
+    try:
+        kb_entry.is_deleted = True
+        db.session.commit()
+        return jsonify({"success": True, "message": "Knowledge entry deleted"}), 200
+    except Exception as e:
+        db.session.rollback()
+        print(f"Delete KB Error: {e}")
+        return jsonify({"success": False, "message": "Database error"}), 500
+
+# Complaint/Compliment System Endpoints
+
+@app.route('/api/complaints', methods=['POST'])
+def file_complaint():
+    """File a complaint or compliment against a customer, chef, or delivery person"""
+    try:
+        token = request.headers.get('Authorization').split(' ')[1]
+        payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+        complainant_email = payload.get('email')
+        complainant_role = payload.get('role')
+    except: return jsonify({"success": False}), 401
+
+    data = request.get_json()
+    accused_id = data.get('accused_id')
+    accused_type = data.get('accused_type')  # 'customer', 'chef', 'delivery'
+    complaint_type = data.get('complaint_type')  # 'complaint' or 'compliment'
+    category = data.get('category')
+    description = data.get('description')
+    related_order_id = data.get('related_order_id')
+
+    if not all([accused_id, accused_type, complaint_type, category, description]):
+        return jsonify({"success": False, "message": "All fields required"}), 400
+
+    if complaint_type not in ['complaint', 'compliment']:
+        return jsonify({"success": False, "message": "Invalid complaint type"}), 400
+
+    if accused_type not in ['customer', 'chef', 'delivery']:
+        return jsonify({"success": False, "message": "Invalid accused type"}), 400
+
+    try:
+        # Get complainant ID based on role
+        if complainant_role == 'Customer':
+            complainant = Customers.query.filter_by(email=complainant_email).first()
+            complainant_id = complainant.customer_id
+            complainant_type = 'customer'
+        elif complainant_role == 'Delivery':
+            complainant = Employees.query.filter_by(email=complainant_email).first()
+            complainant_id = complainant.employee_id
+            complainant_type = 'delivery'
+        else:
+            return jsonify({"success": False, "message": "Unauthorized"}), 403
+
+        # Validate accused exists
+        if accused_type == 'customer':
+            accused = Customers.query.get(accused_id)
+        elif accused_type in ['chef', 'delivery']:
+            accused = Employees.query.get(accused_id)
+        else:
+            return jsonify({"success": False, "message": "Invalid accused type"}), 400
+
+        if not accused:
+            return jsonify({"success": False, "message": "Accused not found"}), 404
+
+        # Create complaint
+        new_complaint = Complaints(
+            complainant_id=complainant_id,
+            complainant_type=complainant_type,
+            accused_id=accused_id,
+            accused_type=accused_type,
+            complaint_type=complaint_type,
+            category=category,
+            description=description,
+            related_order_id=related_order_id
+        )
+
+        # Handle compliments automatically
+        if complaint_type == 'compliment':
+            new_complaint.status = 'resolved'
+            new_complaint.reviewed_at = datetime.now(timezone.utc)
+            
+            # Decrement warning count for the accused party
+            if accused_type == 'customer' and accused.warning_count > 0:
+                accused.warning_count -= 1
+        else:
+            # Complaints need manager review
+            new_complaint.status = 'pending'
+
+        db.session.add(new_complaint)
+        db.session.commit()
+
+        return jsonify({"success": True, "message": "Complaint filed successfully", "complaint_id": new_complaint.complaint_id}), 201
+
+    except Exception as e:
+        print(e)
+        return jsonify({"success": False, "message": "Database error"}), 500
+
+@app.route('/api/complaints', methods=['GET'])
+def get_complaints():
+    """Get complaints based on user role"""
+    try:
+        token = request.headers.get('Authorization').split(' ')[1]
+        payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+        user_role = payload.get('role')
+        user_email = payload.get('email')
+        
+        # If role is not set in token, infer it from user existence
+        if not user_role:
+            user = Customers.query.filter_by(email=user_email).first()
+            if user:
+                user_role = 'Customer'
+            else:
+                user = Employees.query.filter_by(email=user_email).first()
+                if user:
+                    user_role = user.role
+                else:
+                    return jsonify({"success": False, "message": "User not found"}), 404
+    except:
+        return jsonify({"success": False, "message": "Invalid token"}), 401
+
+    try:
+        # Get user info
+        if user_role == 'Customer':
+            user = Customers.query.filter_by(email=user_email).first()
+            user_id = user.customer_id if user else None
+        elif user_role in ['Delivery', 'Chef', 'Manager']:
+            user = Employees.query.filter_by(email=user_email).first()
+            user_id = user.employee_id if user else None
+        else:
+            return jsonify({"success": False, "message": "Invalid user role"}), 403
+
+        if not user:
+            return jsonify({"success": False, "message": "User not found"}), 404
+
+        # Filter complaints based on user role
+        if user_role == 'Manager':
+            # Managers see all complaints
+            complaints = Complaints.query.order_by(Complaints.created_at.desc()).all()
+        elif user_role == 'Customer':
+            # Customers see complaints they filed or complaints against them
+            complaints = Complaints.query.filter(
+                ((Complaints.complainant_type == 'customer') & (Complaints.complainant_id == user_id)) |
+                ((Complaints.accused_type == 'customer') & (Complaints.accused_id == user_id))
+            ).order_by(Complaints.created_at.desc()).all()
+        elif user_role in ['Delivery', 'Chef']:
+            # Delivery drivers and chefs see complaints they filed or complaints against them
+            employee_type = 'delivery' if user_role == 'Delivery' else 'chef'
+            complaints = Complaints.query.filter(
+                ((Complaints.complainant_type == employee_type) & (Complaints.complainant_id == user_id)) |
+                ((Complaints.accused_type == employee_type) & (Complaints.accused_id == user_id))
+            ).order_by(Complaints.created_at.desc()).all()
+        else:
+            return jsonify({"success": False, "message": "Unauthorized"}), 403
+
+        complaints_list = []
+
+        for c in complaints:
+            # Get complainant info
+            if c.complainant_type == 'customer':
+                complainant = Customers.query.get(c.complainant_id)
+                complainant_name = complainant.username if complainant else 'Unknown'
+            else:  # delivery
+                complainant = Employees.query.get(c.complainant_id)
+                complainant_name = complainant.name if complainant else 'Unknown'
+
+            # Get accused info
+            if c.accused_type == 'customer':
+                accused = Customers.query.get(c.accused_id)
+                accused_name = accused.username if accused else 'Unknown'
+            else:  # chef or delivery
+                accused = Employees.query.get(c.accused_id)
+                accused_name = accused.name if accused else 'Unknown'
+
+            complaints_list.append({
+                'complaint_id': c.complaint_id,
+                'complainant_name': complainant_name,
+                'complainant_type': c.complainant_type,
+                'accused_name': accused_name,
+                'accused_type': c.accused_type,
+                'complaint_type': c.complaint_type,
+                'category': c.category,
+                'description': c.description,
+                'related_order_id': c.related_order_id,
+                'status': c.status,
+                'created_at': c.created_at.isoformat() if c.created_at else None,
+                'reviewed_at': c.reviewed_at.isoformat() if c.reviewed_at else None,
+                'disputed_at': c.disputed_at.isoformat() if c.disputed_at else None,
+                'dispute_reason': c.dispute_reason,
+                'appeal_submitted_at': c.appealed_at.isoformat() if c.appealed_at else None,
+                'appeal_message': c.appeal_message
+            })
+
+        return jsonify({"success": True, "complaints": complaints_list}), 200
+
+    except Exception as e:
+        print(e)
+        return jsonify({"success": False, "message": "Database error"}), 500
+
+# Evaluate employee performance and apply demotions/promotions
+def evaluate_employee_performance(employee):
+    """Evaluate employee performance based on complaints, compliments, and ratings"""
+    
+    # Check for demotion conditions
+    should_demote = False
+    
+    # Condition 1: 3 or more complaints
+    if employee.complaint_count >= 3:
+        should_demote = True
+    
+    # Condition 2: For chefs - consistently low ratings (<2 average)
+    if employee.role == 'Chef':
+        # Calculate average rating for chef's dishes
+        avg_rating = db.session.query(db.func.avg(Reviews.dish_rating)).\
+            join(Order_Items, Reviews.order_id == Order_Items.order_id).\
+            join(Dishes, Order_Items.dish_id == Dishes.dish_id).\
+            filter(Dishes.chef_id == employee.employee_id).\
+            scalar()
+        
+        if avg_rating and avg_rating < 2.0:
+            should_demote = True
+    
+    # Condition 3: For delivery people - could add similar rating checks if needed
+    # (Currently only complaint-based for delivery people)
+    
+    if should_demote:
+        employee.demotion_count += 1
+        employee.complaint_count %= 3  # Reset complaint count after demotion
+        
+        # Check if employee should be fired (2 demotions)
+        if employee.demotion_count >= 2:
+            employee.status = 'Fired'
+    
+    # Check for bonus conditions (3 compliments)
+    if employee.compliment_count >= 3:
+        # Reset complaint count or give bonus (not tracking salary)
+        employee.complaint_count = 0
+        # Decrement demotion count as promotion reward
+        employee.demotion_count = max(0, employee.demotion_count - 1)
+    
+    # Condition 2: For chefs - high ratings (>4 average)
+    if employee.role == 'Chef':
+        # Calculate average rating for chef's dishes
+        avg_rating = db.session.query(db.func.avg(Reviews.dish_rating)).\
+            join(Order_Items, Reviews.order_id == Order_Items.order_id).\
+            join(Dishes, Order_Items.dish_id == Dishes.dish_id).\
+            filter(Dishes.chef_id == employee.employee_id).\
+            scalar()
+        
+        if avg_rating and avg_rating > 4.0:
+            # Give bonus (not tracking salary, could reset complaint count or other benefits)
+            employee.complaint_count = max(0, employee.complaint_count - 1)  # Reduce complaints as bonus
+            # Decrement demotion count as promotion reward
+            employee.demotion_count = max(0, employee.demotion_count - 1)
+
+@app.route('/api/complaints/<int:complaint_id>/review', methods=['PUT'])
+def review_complaint(complaint_id):
+    """Manager reviews and decides on a complaint"""
+    try:
+        token = request.headers.get('Authorization').split(' ')[1]
+        payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+        if payload.get('role') != 'Manager': return jsonify({"success": False}), 403
+        manager_email = payload.get('email')
+    except: return jsonify({"success": False}), 401
+
+    data = request.get_json()
+    decision = data.get('decision')  # 'upheld' or 'dismissed'
+    manager_decision = data.get('manager_decision')
+
+    if decision not in ['upheld', 'dismissed']:
+        return jsonify({"success": False, "message": "Invalid decision"}), 400
+
+    if not manager_decision:
+        return jsonify({"success": False, "message": "Decision explanation required"}), 400
+
+    try:
+        manager = Employees.query.filter_by(email=manager_email).first()
+        complaint = Complaints.query.get(complaint_id)
+
+        if not complaint:
+            return jsonify({"success": False, "message": "Complaint not found"}), 404
+
+        if complaint.status != 'pending':
+            return jsonify({"success": False, "message": "Complaint already reviewed"}), 400
+
+        # Update complaint
+        complaint.status = decision
+        complaint.manager_reviewed_by = manager.employee_id
+        complaint.manager_decision = manager_decision
+        complaint.reviewed_at = datetime.now(timezone.utc)
+
+        # Check if complainant is VIP (for double weighting)
+        complainant_is_vip = False
+        if complaint.complainant_type == 'customer':
+            complainant_customer = Customers.query.get(complaint.complainant_id)
+            if complainant_customer:
+                vip_record = VIP_Customers.query.filter_by(customer_id=complainant_customer.customer_id).first()
+                complainant_is_vip = vip_record is not None
+        weight = 2 if complainant_is_vip else 1
+
+        # Handle complaints and compliments based on type and accused type
+        if decision == 'upheld':
+            if complaint.complaint_type == 'complaint':
+                if complaint.accused_type == 'customer':
+                    # Handle customer complaints (existing logic)
+                    accused_customer = Customers.query.get(complaint.accused_id)
+                    if accused_customer:
+                        accused_customer.warning_count += 1
+                        
+                        # Auto-demote VIP customers after 2 warnings
+                        if accused_customer.warning_count >= 2:
+                            vip_record = VIP_Customers.query.filter_by(customer_id=accused_customer.customer_id).first()
+                            if vip_record:
+                                db.session.delete(vip_record)
+                                accused_customer.warning_count = 0
+                        
+                        # Auto-blacklist after 3 warnings
+                        if accused_customer.warning_count >= 3:
+                            accused_customer.is_blacklisted = True
+                            
+                elif complaint.accused_type in ['chef', 'delivery']:
+                    # Handle employee complaints
+                    accused_employee = Employees.query.get(complaint.accused_id)
+                    if accused_employee:
+                        accused_employee.complaint_count += weight
+                        # Evaluate performance after complaint
+                        evaluate_employee_performance(accused_employee)
+                        
+            elif complaint.complaint_type == 'compliment':
+                if complaint.accused_type in ['chef', 'delivery']:
+                    # Handle employee compliments
+                    accused_employee = Employees.query.get(complaint.accused_id)
+                    if accused_employee:
+                        accused_employee.complaint_count = max(0, accused_employee.complaint_count - weight)
+                        # Evaluate performance after compliment
+                        evaluate_employee_performance(accused_employee)
+
+        db.session.commit()
+
+        return jsonify({"success": True, "message": "Complaint reviewed successfully"}), 200
+
+    except Exception as e:
+        print(e)
+        return jsonify({"success": False, "message": "Database error"}), 500
+
+@app.route('/api/complaints/<int:complaint_id>/dispute', methods=['PUT'])
+def dispute_complaint(complaint_id):
+    """Allow complainant to dispute a manager's decision"""
+    try:
+        token = request.headers.get('Authorization').split(' ')[1]
+        payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+        complainant_email = payload.get('email')
+        complainant_role = payload.get('role')
+    except: return jsonify({"success": False}), 401
+
+    data = request.get_json()
+    dispute_reason = data.get('dispute_reason')
+
+    if not dispute_reason:
+        return jsonify({"success": False, "message": "Dispute reason required"}), 400
+
+    try:
+        # Get complainant ID
+        if complainant_role == 'Customer':
+            complainant = Customers.query.filter_by(email=complainant_email).first()
+            complainant_id = complainant.customer_id
+        elif complainant_role == 'Delivery':
+            complainant = Employees.query.filter_by(email=complainant_email).first()
+            complainant_id = complainant.employee_id
+        else:
+            return jsonify({"success": False, "message": "Unauthorized"}), 403
+
+        complaint = Complaints.query.get(complaint_id)
+
+        if not complaint:
+            return jsonify({"success": False, "message": "Complaint not found"}), 404
+
+        # Verify complainant owns this complaint
+        if complaint.complainant_id != complainant_id:
+            return jsonify({"success": False, "message": "Unauthorized"}), 403
+
+        if complaint.status not in ['upheld', 'dismissed']:
+            return jsonify({"success": False, "message": "Can only dispute reviewed complaints"}), 400
+
+        if complaint.disputed_at:
+            return jsonify({"success": False, "message": "Already disputed"}), 400
+
+        # Update complaint with dispute
+        complaint.status = 'disputed'
+        complaint.disputed_at = datetime.now(timezone.utc)
+        complaint.dispute_reason = dispute_reason
+
+        db.session.commit()
+
+        return jsonify({"success": True, "message": "Dispute filed successfully"}), 200
+
+    except Exception as e:
+        print(e)
+        return jsonify({"success": False, "message": "Database error"}), 500
+
+@app.route('/api/complaints/<int:complaint_id>/appeal', methods=['POST'])
+def appeal_complaint(complaint_id):
+    """Allow accused party to appeal a complaint with a message to the manager"""
+    try:
+        token = request.headers.get('Authorization').split(' ')[1]
+        payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+        accused_email = payload.get('email')
+        accused_role = payload.get('role')
+    except Exception as e:
+        print(f"JWT decode error: {e}")
+        return jsonify({"success": False}), 401
+
+    data = request.get_json()
+    appeal_message = data.get('appeal_message')
+
+    if not appeal_message:
+        return jsonify({"success": False, "message": "Appeal message required"}), 400
+
+    try:
+        # Get accused ID
+        accused = None
+        accused_id = None
+        
+        # First try to find as customer
+        accused = Customers.query.filter_by(email=accused_email).first()
+        if accused:
+            accused_id = accused.customer_id
+            accused_role = 'Customer'  # Override role if not set
+        else:
+            # Try to find as employee
+            accused = Employees.query.filter_by(email=accused_email).first()
+            if accused:
+                accused_id = accused.employee_id
+                accused_role = accused.role  # Use the role from employee record
+            else:
+                return jsonify({"success": False, "message": "User not found"}), 404
+
+        complaint = Complaints.query.get(complaint_id)
+
+        if not complaint:
+            return jsonify({"success": False, "message": "Complaint not found"}), 404
+
+        # Verify accused is the target of this complaint
+        if complaint.accused_id != accused_id:
+            return jsonify({"success": False, "message": "Unauthorized"}), 403
+
+        if complaint.status not in ['pending', 'notified']:
+            return jsonify({"success": False, "message": f"Can only appeal pending or notified complaints, current status: {complaint.status}"}), 400
+
+        if hasattr(complaint, 'appeal_message') and complaint.appeal_message:
+            return jsonify({"success": False, "message": "Already appealed"}), 400
+
+        # Update complaint with appeal
+        complaint.status = 'appealed'
+        complaint.appeal_message = appeal_message
+        complaint.appealed_at = datetime.now(timezone.utc)
+
+        db.session.commit()
+
+        # Mark the related notification as read
+        try:
+            # Find the notification related to this complaint
+            notification = User_Notifications.query.filter_by(
+                related_id=complaint_id,
+                type='complaint'
+            ).first()
+            
+            if notification:
+                notification.is_read = True
+                db.session.commit()
+        except Exception as e:
+            print(f"Error marking notification as read: {e}")
+            # Don't fail the appeal if marking notification fails
+
+        return jsonify({"success": True, "message": "Appeal submitted successfully"}), 200
+
+    except Exception as e:
+        print(f"Error filing appeal: {e}")
+        db.session.rollback()
+        return jsonify({"success": False, "message": "Database error"}), 500
+
+@app.route('/api/complaints/<int:complaint_id>/review-appeal', methods=['PUT'])
+@require_role('Manager')
+def review_complaint_appeal(complaint_id):
+    """Manager reviews an appeal and decides to repeal or uphold the complaint"""
+    try:
+        token = request.headers.get('Authorization').split(' ')[1]
+        payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+        manager = Employees.query.filter_by(email=payload.get('email')).first()
+
+        if not manager or manager.role != 'Manager':
+            return jsonify({"success": False, "message": "Manager access required"}), 403
+
+        data = request.get_json()
+        decision = data.get('decision')  # 'repeal' or 'uphold'
+        review_notes = data.get('review_notes', '')
+
+        if decision not in ['repeal', 'uphold']:
+            return jsonify({"success": False, "message": "Invalid decision"}), 400
+
+        complaint = Complaints.query.get(complaint_id)
+        if not complaint:
+            return jsonify({"success": False, "message": "Complaint not found"}), 404
+
+        if complaint.status != 'appealed':
+            return jsonify({"success": False, "message": "Complaint not in appealed status"}), 400
+
+        # Get complainant (accuser) and accused
+        complainant = None
+        accused = None
+
+        if complaint.complainant_type == 'customer':
+            complainant = Customers.query.get(complaint.complainant_id)
+        else:
+            complainant = Employees.query.get(complaint.complainant_id)
+
+        if complaint.accused_type == 'customer':
+            accused = Customers.query.get(complaint.accused_id)
+        else:
+            accused = Employees.query.get(complaint.accused_id)
+
+        if decision == 'repeal':
+            # Repeal: Add 2 complaints to the complainant (accuser)
+            if complainant:
+                if complaint.complainant_type == 'customer':
+                    complainant.warning_count += 2
+                else:  # employee (chef or delivery)
+                    complainant.complaint_count += 2
+                    
+                    # Check for demotion (3 complaints = 1 demotion)
+                    if complainant.complaint_count >= 3:
+                        complainant.demotion_count += 1
+                        complainant.complaint_count = 0  # Reset complaint count after demotion
+                        
+                        # Handle role demotion
+                        if complainant.role == 'Chef':
+                            complainant.role = 'Delivery'
+                        elif complainant.role == 'Delivery':
+                            # Delivery drivers get fired on demotion since there's no lower role
+                            complainant.status = 'Fired'
+                            complainant.demotion_count = 0
+                        
+                        # Check for firing (2 demotions = fired), but only if not already fired
+                        if complainant.demotion_count >= 2 and complainant.status != 'Fired':
+                            complainant.status = 'Fired'
+                            complainant.demotion_count = 0
+            
+            complaint.status = 'repealed'
+            complaint.manager_decision = f"REPEALED: {review_notes}"
+        else:  # uphold
+            # Uphold: Add 1 warning to the accused
+            if accused:
+                if complaint.accused_type == 'customer':
+                    accused.warning_count += 1
+                else:  # employee
+                    accused.complaint_count += 1
+                    
+                    # Check for demotion
+                    if accused.complaint_count >= 3:
+                        accused.demotion_count += 1
+                        accused.complaint_count = 0
+                        
+                        # Handle role demotion
+                        if accused.role == 'Chef':
+                            accused.role = 'Delivery'
+                        elif accused.role == 'Delivery':
+                            # Delivery drivers get fired on demotion
+                            accused.status = 'Fired'
+                            accused.demotion_count = 0
+                        
+                        # Check for firing (2 demotions = fired), but only if not already fired
+                        if accused.demotion_count >= 2 and accused.status != 'Fired':
+                            accused.status = 'Fired'
+                            accused.demotion_count = 0
+            
+            complaint.status = 'upheld'
+            complaint.manager_decision = f"UPHELD: {review_notes}"
+
+        complaint.reviewed_at = datetime.now(timezone.utc)
+        complaint.manager_reviewed_by = manager.employee_id
+
+        db.session.commit()
+
+        return jsonify({"success": True, "message": f"Complaint {decision}ed successfully"}), 200
+
+    except Exception as e:
+        print(f"Error reviewing appeal: {e}")
+        db.session.rollback()
+        return jsonify({"success": False, "message": "Database error"}), 500
+
+@app.route('/api/complaints/<int:complaint_id>/notify', methods=['POST'])
+@require_role('Manager')
+def notify_complaint_accused(complaint_id):
+    """Notify the accused party about a complaint"""
+    try:
+        token = request.headers.get('Authorization').split(' ')[1]
+        payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+        manager = Employees.query.filter_by(email=payload.get('email')).first()
+        
+        if not manager or manager.role != 'Manager':
+            return jsonify({"success": False, "message": "Manager access required"}), 403
+
+        complaint = Complaints.query.get(complaint_id)
+        if not complaint:
+            return jsonify({"success": False, "message": "Complaint not found"}), 404
+
+        # Get accused user info
+        accused_user_id = None
+        accused_name = ""
+        if complaint.accused_type == 'customer':
+            accused = Customers.query.get(complaint.accused_id)
+            if accused:
+                accused_user_id = accused.customer_id
+                accused_name = accused.username
+        elif complaint.accused_type in ['chef', 'delivery']:
+            accused = Employees.query.get(complaint.accused_id)
+            if accused:
+                accused_user_id = accused.employee_id
+                accused_name = accused.name
+
+        if not accused_user_id:
+            return jsonify({"success": False, "message": "Accused user not found"}), 404
+
+        # Create notification for accused user
+        notification = User_Notifications(
+            user_id=accused_user_id,
+            title="Complaint Filed Against You",
+            message=f"A {complaint.complaint_type} has been filed against you regarding: {complaint.description}. Category: {complaint.category}. A manager will review this matter. You have the option to appeal this complaint if you believe it is unjust.",
+            type="complaint",
+            related_id=complaint.complaint_id
+        )
+        db.session.add(notification)
+        db.session.commit()
+
+        return jsonify({"success": True, "message": f"Notification sent to {accused_name}"}), 200
+
+    except Exception as e:
+        print(f"Error notifying accused: {e}")
+        db.session.rollback()
+        return jsonify({"success": False, "message": "Failed to notify accused party"}), 500
+
+@app.route('/api/complaints/<int:complaint_id>/status', methods=['PUT'])
+@require_role('Manager')
+def update_complaint_status(complaint_id):
+    """Update complaint status (used for marking as notified)"""
+    try:
+        token = request.headers.get('Authorization').split(' ')[1]
+        payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+        manager = Employees.query.filter_by(email=payload.get('email')).first()
+        
+        if not manager or manager.role != 'Manager':
+            return jsonify({"success": False, "message": "Manager access required"}), 403
+
+        data = request.get_json()
+        status = data.get('status')
+
+        complaint = Complaints.query.get(complaint_id)
+        if not complaint:
+            return jsonify({"success": False, "message": "Complaint not found"}), 404
+
+        complaint.status = status
+        if status in ['notified', 'upheld', 'dismissed']:
+            complaint.reviewed_at = datetime.now(timezone.utc)
+
+        db.session.commit()
+
+        return jsonify({"success": True, "message": f"Complaint status updated to {status}"}), 200
+
+    except Exception as e:
+        print(f"Error updating complaint status: {e}")
+        db.session.rollback()
+        return jsonify({"success": False, "message": "Failed to update complaint status"}), 500
 
 if __name__ == "__main__":
     app.run(debug=True)
