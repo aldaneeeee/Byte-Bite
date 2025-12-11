@@ -5,9 +5,15 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { Separator } from './ui/separator';
+<<<<<<< Updated upstream
 import { MessageSquare, ThumbsUp, Send, Plus, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../utils/api'; // Import api
+=======
+import { MessageSquare, ThumbsUp, Send, Plus, User, Calendar, Flag, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { api } from '../utils/api';
+>>>>>>> Stashed changes
 
 // Interface for forum post
 interface ForumPost {
@@ -41,6 +47,12 @@ export function ForumPage() {
   const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportForm, setReportForm] = useState({
+    contentId: '',
+    contentType: '', // 'post' or 'comment'
+    reason: ''
+  });
 
   const isLoggedIn = localStorage.getItem('authToken');
 
@@ -144,6 +156,40 @@ export function ForumPage() {
     }
   };
 
+<<<<<<< Updated upstream
+=======
+  // Handle opening report modal
+  const handleOpenReport = (contentId: string, contentType: 'post' | 'comment') => {
+    setReportForm({
+      contentId,
+      contentType,
+      reason: ''
+    });
+    setShowReportModal(true);
+  };
+
+  // Handle submitting a report
+  const handleSubmitReport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reportForm.reason.trim()) return;
+
+    try {
+      const res = await api.reportForumContent(reportForm);
+      if (res.success) {
+        alert('Report submitted successfully. A manager will review it.');
+        setShowReportModal(false);
+        setReportForm({ contentId: '', contentType: '', reason: '' });
+      } else {
+        alert('Failed to submit report. Please try again.');
+      }
+    } catch (error) {
+      console.error('Failed to submit report:', error);
+      alert('Failed to submit report. Please try again.');
+    }
+  };
+
+  // Format date for display
+>>>>>>> Stashed changes
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -257,6 +303,16 @@ export function ForumPage() {
                     <div className="flex items-center gap-1">
                       <MessageSquare className="w-4 h-4" /> {post.commentCount}
                     </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenReport(post.id, 'post');
+                      }}
+                      className="flex items-center gap-1 hover:text-red-400 transition-colors"
+                    >
+                      <Flag className="w-4 h-4" />
+                      <span>Report</span>
+                    </button>
                   </div>
                 </Card>
               ))
@@ -274,9 +330,32 @@ export function ForumPage() {
                   {comments.length === 0 && <p className="text-white/50 text-center py-4">No comments yet.</p>}
                   {comments.map((comment) => (
                     <div key={comment.id} className="bg-[#1a2f4a] p-3 rounded-lg">
+<<<<<<< Updated upstream
                       <div className="flex items-center gap-2 mb-2">
                         <span className="text-[#00ff88] font-bold text-xs">{comment.authorName}</span>
                         <span className="text-white/40 text-xs ml-auto">{formatDate(comment.createdAt)}</span>
+=======
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 bg-[#00ff88]/20 rounded-full flex items-center justify-center">
+                            <User className="w-3 h-3 text-[#00ff88]" />
+                          </div>
+                          <p className="text-white text-sm">{comment.authorName}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <p className="text-white/50 text-xs">{formatDate(comment.createdAt)}</p>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenReport(comment.id, 'comment');
+                            }}
+                            className="text-red-400 hover:text-red-300 text-xs flex items-center gap-1"
+                          >
+                            <Flag className="w-3 h-3" />
+                            Report
+                          </button>
+                        </div>
+>>>>>>> Stashed changes
                       </div>
                       <p className="text-white/80 text-sm">{comment.content}</p>
                     </div>
@@ -304,6 +383,59 @@ export function ForumPage() {
             )}
           </div>
         </div>
+
+        {/* Report Modal */}
+        {showReportModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+            <Card className="bg-[#0f1f3a] border-[#00ff88]/20 max-w-md w-full">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xl font-semibold text-white">Report Content</h3>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setShowReportModal(false)}
+                    className="text-white/50 hover:text-white"
+                  >
+                    <X className="w-5 h-5" />
+                  </Button>
+                </div>
+                <form onSubmit={handleSubmitReport} className="space-y-4">
+                  <div>
+                    <Label htmlFor="report-reason" className="text-white/90">
+                      Why are you reporting this {reportForm.contentType}?
+                    </Label>
+                    <Textarea
+                      id="report-reason"
+                      value={reportForm.reason}
+                      onChange={(e) => setReportForm({...reportForm, reason: e.target.value})}
+                      placeholder="Please provide details about why you're reporting this content..."
+                      required
+                      rows={4}
+                      className="bg-[#1a2f4a] border-[#00ff88]/20 text-white placeholder:text-white/40 mt-2"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      type="submit"
+                      className="bg-red-600 hover:bg-red-700 text-white flex-1"
+                    >
+                      Submit Report
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setShowReportModal(false)}
+                      className="border-[#00ff88]/20 text-white hover:bg-[#00ff88]/10"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </form>
+              </div>
+            </Card>
+          </div>
+        )}
       </div>
     </div>
   );

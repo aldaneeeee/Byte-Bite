@@ -4,6 +4,7 @@ import { useCart } from './CartContext';
 import { Button } from './ui/button';
 import { useState, useEffect } from 'react';
 import { api } from '../utils/api';
+import { NotificationBell } from './NotificationBell';
 
 // Navbar component - appears at top of every page
 export function Navbar() {
@@ -72,6 +73,9 @@ export function Navbar() {
 
           {/* Right Side Icons - Cart and Login/Profile */}
           <div className="flex items-center space-x-4">
+            {/* Notification Bell - only show when logged in */}
+            {isLoggedIn && <NotificationBell />}
+            
             {/* Shopping cart icon with item count badge */}
             <Link to="/checkout" className="relative">
               <Button variant="ghost" size="icon" className="hover:bg-[#1a2f4a] text-white">

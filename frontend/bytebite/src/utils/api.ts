@@ -343,6 +343,7 @@ export const api = {
         return fetchAPI("manager/employees");
     },
 
+<<<<<<< Updated upstream
     sendChatMessage: (message: string) => {
         return fetchAPI("chat", {
             method: "POST",
@@ -391,6 +392,20 @@ export const api = {
     },
 
 
+=======
+    // Forum operations
+    getForumPosts: () => fetchAPI("forum/posts"),
+    createForumPost: (post: any) => fetchAPI("forum/posts", { method: "POST", body: JSON.stringify(post) }),
+    getPostComments: (postId: string) => fetchAPI(`forum/posts/${postId}/comments`),
+    createComment: (postId: string, comment: any) => fetchAPI(`forum/posts/${postId}/comments`, { method: "POST", body: JSON.stringify(comment) }),
+    reportForumContent: (report: any) => fetchAPI("forum/reports", { method: "POST", body: JSON.stringify(report) }),
+    getForumReports: () => fetchAPI("manager/forum-reports"),
+    updateReportStatus: (reportId: number, status: string) => fetchAPI(`manager/forum-reports/${reportId}`, { method: "PUT", body: JSON.stringify({ status }) }),
+
+    // Notification endpoints
+    getUserNotifications: () => fetchAPI("user/notifications"),
+    markNotificationRead: (notificationId: number) => fetchAPI(`user/notifications/${notificationId}/read`, { method: "PUT" }),
+>>>>>>> Stashed changes
 
     // Public endpoints for home page
     getRecommendations: () => fetchAPI("recommendations"),

@@ -11,11 +11,15 @@ import { Alert, AlertDescription } from './ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../utils/api';
+<<<<<<< Updated upstream
 import { 
   Users, ChefHat, Truck, Crown, Edit, Trash2, Plus, X, Search, 
   DollarSign, Clock, Gavel, FileText, ArrowUpRight, ArrowDownLeft,
   Brain, Star, MessageSquare // 新增图标
 } from 'lucide-react';
+=======
+import { Users, ChefHat, Truck, Crown, Edit, Trash2, Plus, X, Search, DollarSign, Clock, Gavel, FileText, ArrowUpRight, ArrowDownLeft, Flag } from 'lucide-react';
+>>>>>>> Stashed changes
 
 // Interfaces
 interface Employee {
@@ -67,6 +71,7 @@ interface FinancialLog {
     created_at: string;
 }
 
+<<<<<<< Updated upstream
 // 👇👇👇 新增 KB 接口 👇👇👇
 interface KBEntry {
   id: number;
@@ -76,6 +81,22 @@ interface KBEntry {
   avg_rating: number;
   rating_count: number;
   created_at: string;
+=======
+interface ForumReport {
+    report_id: number;
+    reporter_name: string;
+    content_type: 'post' | 'comment';
+    content_info: {
+        title?: string;
+        content: string;
+        author: string;
+    };
+    reason: string;
+    status: 'pending' | 'reviewed' | 'resolved' | 'notified';
+    created_at: string;
+    reviewed_at?: string;
+    reviewed_by?: string;
+>>>>>>> Stashed changes
 }
 
 export function ManagerDashboard() {
@@ -83,6 +104,7 @@ export function ManagerDashboard() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [biddings, setBiddings] = useState<BiddingSession[]>([]);
   const [financialLogs, setFinancialLogs] = useState<FinancialLog[]>([]);
+  const [forumReports, setForumReports] = useState<ForumReport[]>([]);
   const [deliveryStaff, setDeliveryStaff] = useState<Employee[]>([]);
   
   // 👇👇👇 新增 KB State 👇👇👇
@@ -134,23 +156,48 @@ export function ManagerDashboard() {
   const loadData = async () => {
     try {
       setLoading(true);
+<<<<<<< Updated upstream
       // 👇👇👇 增加 getKnowledgeBase 调用 👇👇👇
       const [employeesRes, customersRes, biddingsRes, financialsRes, kbRes] = await Promise.all([
+=======
+      const [employeesRes, customersRes, biddingsRes, financialsRes, reportsRes] = await Promise.allSettled([
+>>>>>>> Stashed changes
         api.getEmployees(),
         api.getAllCustomers(),
         api.getManagerBiddings(),
         api.getFinancialLogs(),
+<<<<<<< Updated upstream
         api.getKnowledgeBase() // 获取 AI 知识库
+=======
+        api.getForumReports()
+>>>>>>> Stashed changes
       ]);
 
-      if (employeesRes.success) {
-          setEmployees(employeesRes.employees);
-          setDeliveryStaff(employeesRes.employees.filter((e: Employee) => e.role === 'Delivery'));
+      if (employeesRes.status === 'fulfilled' && employeesRes.value.success) {
+          setEmployees(employeesRes.value.employees);
+          setDeliveryStaff(employeesRes.value.employees.filter((e: Employee) => e.role === 'Delivery'));
+      } else if (employeesRes.status === 'rejected') {
+          console.error('Failed to load employees:', employeesRes.reason);
       }
+      if (customersRes.status === 'fulfilled' && customersRes.value.success) setCustomers(customersRes.value.customers);
+      else if (customersRes.status === 'rejected') console.error('Failed to load customers:', customersRes.reason);
+      if (biddingsRes.status === 'fulfilled' && biddingsRes.value.success) setBiddings(biddingsRes.value.biddings);
+      else if (biddingsRes.status === 'rejected') console.error('Failed to load biddings:', biddingsRes.reason);
+      if (financialsRes.status === 'fulfilled' && financialsRes.value.success) setFinancialLogs(financialsRes.value.logs);
+      else if (financialsRes.status === 'rejected') console.error('Failed to load financial logs:', financialsRes.reason);
+      if (reportsRes.status === 'fulfilled' && reportsRes.value.success) {
+          setForumReports(reportsRes.value.reports);
+          console.log('Loaded forum reports:', reportsRes.value.reports);
+      } else if (reportsRes.status === 'rejected') {
+          console.error('Failed to load forum reports:', reportsRes.reason);
+      }
+<<<<<<< Updated upstream
       if (customersRes.success) setCustomers(customersRes.customers);
       if (biddingsRes.success) setBiddings(biddingsRes.biddings);
       if (financialsRes.success) setFinancialLogs(financialsRes.logs);
       if (kbRes.success) setKbEntries(kbRes.entries); // 设置 KB 数据
+=======
+>>>>>>> Stashed changes
       
     } catch (err) {
       setError('Failed to load data');
@@ -266,6 +313,16 @@ export function ManagerDashboard() {
       } 
   };
 
+  const handleUpdateReportStatus = async (reportId: number, status: string) => {
+      try {
+          const res = await api.updateReportStatus(reportId, status);
+          if(res.success) {
+              loadData();
+              setSuccess(`Report ${status}`);
+          }
+      } catch(e) { setError('Failed to update report status'); }
+  };
+
   const handleOpenAssign = (b: BiddingSession) => { setSelectedBidding(b); setAssignForm({ employee_id: '', memo: '' }); setAssignModalOpen(true); };
   
   const handleAssignSubmit = async (e: React.FormEvent) => { 
@@ -348,9 +405,14 @@ export function ManagerDashboard() {
             <TabsTrigger value="customers" className="flex-1 data-[state=active]:bg-[#00ff88] data-[state=active]:text-[#0a1628]">
                Customer Accounts
             </TabsTrigger>
+<<<<<<< Updated upstream
             {/* 👇👇👇 新增 Tab: AI Brain 👇👇👇 */}
             <TabsTrigger value="ai-brain" className="flex-1 data-[state=active]:bg-[#00ff88] data-[state=active]:text-[#0a1628]">
                <Brain className="w-4 h-4 mr-2"/> AI Knowledge Base
+=======
+            <TabsTrigger value="reports" className="flex-1 data-[state=active]:bg-[#00ff88] data-[state=active]:text-[#0a1628]">
+               <Flag className="w-4 h-4 mr-2"/> Reports
+>>>>>>> Stashed changes
             </TabsTrigger>
           </TabsList>
 
@@ -556,6 +618,7 @@ export function ManagerDashboard() {
             </Card>
           </TabsContent>
 
+<<<<<<< Updated upstream
           {/* 👇👇👇 Tab: AI Knowledge Base (新增内容) 👇👇👇 */}
           <TabsContent value="ai-brain">
             <div className="grid lg:grid-cols-3 gap-8">
@@ -650,6 +713,65 @@ export function ManagerDashboard() {
                     )}
                 </div>
             </div>
+=======
+          {/* Tab: Reports */}
+          <TabsContent value="reports">
+            <Card className="bg-[#0f1f3a] border-[#00ff88]/20 p-6">
+                <div className="flex justify-between mb-4"><h2 className="text-xl font-semibold">Forum Reports</h2></div>
+                <Table>
+                    <TableHeader>
+                        <TableRow className="border-[#00ff88]/20">
+                            <TableHead className="text-white h-12 align-middle w-1/4">Report Details</TableHead>
+                            <TableHead className="text-white h-12 align-middle w-1/4">Content</TableHead>
+                            <TableHead className="text-white h-12 align-middle w-1/6">Reporter</TableHead>
+                            <TableHead className="text-white h-12 align-middle w-1/6">Status</TableHead>
+                            <TableHead className="text-white h-12 align-middle w-1/6 text-right">Actions</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>{forumReports && forumReports.length > 0 ? forumReports.map(r => (
+                        <TableRow key={r.report_id} className="border-[#00ff88]/10 h-16">
+                            <TableCell className="align-middle text-white">
+                                <div>
+                                    <div className="font-medium">Report #{r.report_id}</div>
+                                    <div className="text-xs text-white/50">{new Date(r.created_at).toLocaleDateString()}</div>
+                                    <div className="text-xs text-white/70 mt-1">{r.reason}</div>
+                                </div>
+                            </TableCell>
+                            <TableCell className="align-middle text-white text-sm">
+                                <div>
+                                    <div className="font-medium">{r.content_type === 'post' ? 'Post' : 'Comment'}</div>
+                                    <div className="text-xs text-white/50 truncate max-w-32">{r.content_info?.content?.substring(0, 50) || 'N/A'}...</div>
+                                </div>
+                            </TableCell>
+                            <TableCell className="align-middle text-white">
+                                <div className="text-sm">{r.reporter_name || 'Unknown'}</div>
+                            </TableCell>
+                            <TableCell className="align-middle">
+                                <Badge className={r.status === 'pending' ? 'bg-yellow-500 text-white' : r.status === 'resolved' ? 'bg-green-500 text-white' : r.status === 'notified' ? 'bg-blue-500 text-white' : 'bg-gray-500 text-white'}>
+                                    {r.status ? r.status.charAt(0).toUpperCase() + r.status.slice(1) : 'Unknown'}
+                                </Badge>
+                            </TableCell>
+                            <TableCell className="align-middle">
+                                <div className="flex justify-end gap-2 items-center">
+                                    {r.status === 'pending' && (
+                                        <>
+                                            <Button size="sm" onClick={() => handleUpdateReportStatus(r.report_id, 'notified')} className="bg-blue-500 hover:bg-blue-600 text-white">Notify Accused</Button>
+                                            <Button size="sm" variant="outline" className="text-red-400" onClick={() => handleUpdateReportStatus(r.report_id, 'reviewed')}>Dismiss</Button>
+                                        </>
+                                    )}
+                                </div>
+                            </TableCell>
+                        </TableRow>
+                    )) : (
+                        <TableRow>
+                            <TableCell colSpan={5} className="text-center text-white/50 py-8">
+                                {forumReports ? 'No reports found' : 'Loading reports...'}
+                            </TableCell>
+                        </TableRow>
+                    )}</TableBody>
+                </Table>
+            </Card>
+>>>>>>> Stashed changes
           </TabsContent>
 
         </Tabs>

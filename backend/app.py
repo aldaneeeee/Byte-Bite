@@ -180,14 +180,25 @@ class Financial_Log(db.Model):
     amount = db.Column(db.Numeric(10, 2), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+<<<<<<< Updated upstream
+=======
+# Forum models
+>>>>>>> Stashed changes
 class Forum_Posts(db.Model):
     __tablename__ = 'Forum_Posts'
     post_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     customer_id = db.Column(db.Integer, db.ForeignKey('Customers.customer_id'), nullable=False)
     title = db.Column(db.String(200), nullable=False)
     content = db.Column(db.Text, nullable=False)
+<<<<<<< Updated upstream
     category = db.Column(db.String(50), default='general')
     created_at = db.Column(db.DateTime, default=utc_now)
+=======
+    category = db.Column(db.String(50), nullable=False)
+    likes = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=utc_now)
+    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
+>>>>>>> Stashed changes
 
 class Forum_Comments(db.Model):
     __tablename__ = 'Forum_Comments'
@@ -197,11 +208,36 @@ class Forum_Comments(db.Model):
     content = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=utc_now)
 
+<<<<<<< Updated upstream
 class Forum_Likes(db.Model):
     __tablename__ = 'Forum_Likes'
     like_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     post_id = db.Column(db.Integer, db.ForeignKey('Forum_Posts.post_id'), nullable=False)
     customer_id = db.Column(db.Integer, db.ForeignKey('Customers.customer_id'), nullable=False)
+=======
+class Forum_Reports(db.Model):
+    __tablename__ = 'Forum_Reports'
+    report_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    reporter_id = db.Column(db.Integer, db.ForeignKey('Customers.customer_id'), nullable=False)
+    content_type = db.Column(db.String(20), nullable=False)  # 'post' or 'comment'
+    content_id = db.Column(db.Integer, nullable=False)  # post_id or comment_id
+    reason = db.Column(db.Text, nullable=False)
+    status = db.Column(db.String(20), default='pending')  # 'pending', 'reviewed', 'resolved'
+    created_at = db.Column(db.DateTime, default=utc_now)
+    reviewed_at = db.Column(db.DateTime)
+    reviewed_by = db.Column(db.Integer, db.ForeignKey('Employees.employee_id'))
+
+class User_Notifications(db.Model):
+    __tablename__ = 'User_Notifications'
+    notification_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('Customers.customer_id'), nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    type = db.Column(db.String(50), nullable=False)  # 'forum_report', 'system', etc.
+    related_id = db.Column(db.Integer)  # Can reference report_id, post_id, etc.
+    is_read = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=utc_now)
+>>>>>>> Stashed changes
 
 def resolve_expired_biddings():
     """
@@ -447,8 +483,8 @@ def get_menu():
         # VIP customers see all dishes
         dishes = Dishes.query.all()
     else:
-        # Non-VIP customers and visitors only see non-VIP dishes
-        dishes = Dishes.query.filter_by(is_vip=False).all()
+        # Everyone (including visitors) can see all dishes
+        dishes = Dishes.query.all()
     
     menu_items = []
     for dish in dishes:
@@ -797,35 +833,66 @@ def delete_employee(employee_id):
         db.session.rollback()
         return jsonify({"success": False, "message": "Failed to delete employee", "error": str(e)}), 500
 
-# Get all customers (for management)
-@app.route('/api/manager/customers', methods=['GET'])
+
+# Get all customers (for management) and update VIP status
+@app.route('/api/manager/customers', methods=['GET', 'PUT'])
 @require_role('Manager')
-def get_customers():
-    customers = Customers.query.all()
-    customer_list = []
-    for cust in customers:
-        # Check if VIP
-        is_vip = VIP_Customers.query.filter_by(customer_id=cust.customer_id).first() is not None
-        
-        customer_list.append({
-            "id": cust.customer_id,
-            "username": cust.username,
-            "email": cust.email,
-            
-            "balance": float(cust.deposited_cash) if cust.deposited_cash else 0.0,
-            
-            
-            "phone_number": cust.phone_number if cust.phone_number else "", 
-            
-            "warning_count": cust.warning_count,
-            "order_count": cust.order_count,
-            "is_vip": is_vip,
-            "is_blacklisted": cust.is_blacklisted
-        })
-    return jsonify({"success": True, "customers": customer_list}), 200
+def manage_customers():
+    if request.method == 'GET':
+        customers = Customers.query.all()
+        customer_list = []
+        for cust in customers:
+            # Check if VIP
+            vip_record = VIP_Customers.query.filter_by(customer_id=cust.customer_id).first()
+            is_vip = vip_record is not None
+            customer_list.append({
+                "id": cust.customer_id,
+                "username": cust.username,
+                "email": cust.email,
+                "balance": float(cust.deposited_cash) if cust.deposited_cash else 0.0,
+                "warning_count": cust.warning_count,
+                "order_count": cust.order_count,
+                "is_vip": is_vip,
+                "is_blacklisted": cust.is_blacklisted
+            })
+        return jsonify({"success": True, "customers": customer_list}), 200
+
+    elif request.method == 'PUT':
+        data = request.get_json()
+        customer_id = data.get('customer_id')
+        # 'promote_vip' or 'demote_vip'
+        action = data.get('action')  
+
+        customer = Customers.query.get(customer_id)
+        if not customer:
+            return jsonify({"success": False, "message": "Customer not found"}), 404
+
+        vip_record = VIP_Customers.query.filter_by(customer_id=customer.customer_id).first()
+
+        if action == 'promote_vip':
+            if not vip_record:
+                new_vip = VIP_Customers(
+                    customer_id=customer.customer_id,
+                    vip_start_date=datetime.utcnow(),
+                    free_deliveries_remaining=5  # example default free deliveries
+                )
+                db.session.add(new_vip)
+                db.session.commit()
+            return jsonify({"success": True, "message": f"{customer.username} promoted to VIP"}), 200
+
+        elif action == 'demote_vip':
+            if vip_record:
+                db.session.delete(vip_record)
+                db.session.commit()
+            return jsonify({"success": True, "message": f"{customer.username} demoted from VIP"}), 200
+
+        else:
+            return jsonify({"success": False, "message": "Invalid action"}), 400
 
 
     return jsonify({"success": True, "customers": customer_list}), 200
+
+
 # Update Customer (Manager) - Specifically for Deposit
 @app.route('/api/manager/customers/<int:customer_id>', methods=['PUT'])
 @require_role('Manager')
@@ -2099,6 +2166,309 @@ def get_recommendations():
     except Exception as e:
         print(f"Error in get_recommendations: {e}")
         return jsonify({"success": False, "message": "Failed to fetch recommendations"}), 500
+
+# Forum API endpoints
+
+# Get all forum posts
+@app.route('/api/forum/posts', methods=['GET'])
+def get_forum_posts():
+    try:
+        posts = Forum_Posts.query.order_by(Forum_Posts.created_at.desc()).all()
+        posts_data = []
+        for post in posts:
+            customer = Customers.query.get(post.customer_id)
+            comment_count = Forum_Comments.query.filter_by(post_id=post.post_id).count()
+            
+            posts_data.append({
+                "id": str(post.post_id),
+                "authorName": customer.username if customer else "Unknown",
+                "title": post.title,
+                "content": post.content,
+                "category": post.category,
+                "likes": post.likes,
+                "commentCount": comment_count,
+                "createdAt": post.created_at.isoformat() if post.created_at else None
+            })
+        
+        return jsonify(posts_data), 200
+    except Exception as e:
+        return jsonify({"error": "Failed to fetch posts"}), 500
+
+# Create a new forum post
+@app.route('/api/forum/posts', methods=['POST'])
+def create_forum_post():
+    auth_header = request.headers.get('Authorization')
+    if not auth_header:
+        return jsonify({"success": False, "message": "Authentication required"}), 401
+    
+    try:
+        token = auth_header.split(' ')[1] if ' ' in auth_header else auth_header
+        payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+        customer = Customers.query.filter_by(email=payload.get('email')).first()
+        
+        if not customer:
+            return jsonify({"success": False, "message": "User not found"}), 404
+        
+        data = request.get_json()
+        new_post = Forum_Posts(
+            customer_id=customer.customer_id,
+            title=data['title'],
+            content=data['content'],
+            category=data['category']
+        )
+        db.session.add(new_post)
+        db.session.commit()
+        
+        return jsonify({"success": True, "message": "Post created successfully"}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": "Failed to create post"}), 500
+
+# Get comments for a specific post
+@app.route('/api/forum/posts/<int:post_id>/comments', methods=['GET'])
+def get_post_comments(post_id):
+    try:
+        comments = Forum_Comments.query.filter_by(post_id=post_id).order_by(Forum_Comments.created_at.asc()).all()
+        comments_data = []
+        for comment in comments:
+            customer = Customers.query.get(comment.customer_id)
+            comments_data.append({
+                "id": str(comment.comment_id),
+                "postId": str(post_id),
+                "authorName": customer.username if customer else "Unknown",
+                "content": comment.content,
+                "createdAt": comment.created_at.isoformat() if comment.created_at else None
+            })
+        
+        return jsonify(comments_data), 200
+    except Exception as e:
+        return jsonify({"error": "Failed to fetch comments"}), 500
+
+# Create a comment on a post
+@app.route('/api/forum/posts/<int:post_id>/comments', methods=['POST'])
+def create_comment(post_id):
+    auth_header = request.headers.get('Authorization')
+    if not auth_header:
+        return jsonify({"success": False, "message": "Authentication required"}), 401
+    
+    try:
+        token = auth_header.split(' ')[1] if ' ' in auth_header else auth_header
+        payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+        customer = Customers.query.filter_by(email=payload.get('email')).first()
+        
+        if not customer:
+            return jsonify({"success": False, "message": "User not found"}), 404
+        
+        data = request.get_json()
+        new_comment = Forum_Comments(
+            post_id=post_id,
+            customer_id=customer.customer_id,
+            content=data['content']
+        )
+        db.session.add(new_comment)
+        db.session.commit()
+        
+        return jsonify({"success": True, "message": "Comment added successfully"}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": "Failed to add comment"}), 500
+
+# Report forum content (post or comment)
+@app.route('/api/forum/reports', methods=['POST'])
+def report_forum_content():
+    auth_header = request.headers.get('Authorization')
+    if not auth_header:
+        return jsonify({"success": False, "message": "Authentication required"}), 401
+    
+    try:
+        token = auth_header.split(' ')[1] if ' ' in auth_header else auth_header
+        payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+        customer = Customers.query.filter_by(email=payload.get('email')).first()
+        
+        if not customer:
+            return jsonify({"success": False, "message": "User not found"}), 404
+        
+        data = request.get_json()
+        new_report = Forum_Reports(
+            reporter_id=customer.customer_id,
+            content_type=data['contentType'],
+            content_id=int(data['contentId']),
+            reason=data['reason']
+        )
+        db.session.add(new_report)
+        db.session.commit()
+        
+        return jsonify({"success": True, "message": "Report submitted successfully"}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": "Failed to submit report"}), 500
+
+# Get all forum reports (Manager only)
+@app.route('/api/manager/forum-reports', methods=['GET'])
+@require_role('Manager')
+def get_forum_reports():
+    try:
+        reports = Forum_Reports.query.order_by(Forum_Reports.created_at.desc()).all()
+        reports_data = []
+        
+        for report in reports:
+            reporter = Customers.query.get(report.reporter_id)
+            reviewer = Employees.query.get(report.reviewed_by) if report.reviewed_by else None
+            
+            # Get content details
+            content_info = {}
+            if report.content_type == 'post':
+                post = Forum_Posts.query.get(report.content_id)
+                if post:
+                    content_info = {
+                        "title": post.title,
+                        "content": post.content[:100] + "..." if len(post.content) > 100 else post.content,
+                        "author": Customers.query.get(post.customer_id).username if Customers.query.get(post.customer_id) else "Unknown"
+                    }
+            elif report.content_type == 'comment':
+                comment = Forum_Comments.query.get(report.content_id)
+                if comment:
+                    content_info = {
+                        "content": comment.content,
+                        "author": Customers.query.get(comment.customer_id).username if Customers.query.get(comment.customer_id) else "Unknown"
+                    }
+            
+            reports_data.append({
+                "report_id": report.report_id,
+                "reporter_name": reporter.username if reporter else "Unknown",
+                "content_type": report.content_type,
+                "content_info": content_info,
+                "reason": report.reason,
+                "status": report.status,
+                "created_at": report.created_at.isoformat() if report.created_at else None,
+                "reviewed_at": report.reviewed_at.isoformat() if report.reviewed_at else None,
+                "reviewed_by": reviewer.name if reviewer else None
+            })
+        
+        return jsonify({"success": True, "reports": reports_data}), 200
+    except Exception as e:
+        return jsonify({"success": False, "message": "Failed to fetch reports"}), 500
+
+# Update report status (Manager only)
+@app.route('/api/manager/forum-reports/<int:report_id>', methods=['PUT'])
+@require_role('Manager')
+def update_report_status(report_id):
+    auth_header = request.headers.get('Authorization')
+    if not auth_header:
+        return jsonify({"success": False, "message": "Authentication required"}), 401
+    
+    try:
+        # Get manager info
+        token = auth_header.split(' ')[1] if ' ' in auth_header else auth_header
+        payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+        manager = Employees.query.filter_by(email=payload.get('email')).first()
+        
+        if not manager or manager.role != 'Manager':
+            return jsonify({"success": False, "message": "Manager access required"}), 403
+        
+        data = request.get_json()
+        report = Forum_Reports.query.get(report_id)
+        
+        if not report:
+            return jsonify({"success": False, "message": "Report not found"}), 404
+        
+        report.status = data.get('status', report.status)
+        if report.status in ['reviewed', 'resolved', 'notified']:
+            report.reviewed_at = datetime.now(timezone.utc)
+            report.reviewed_by = manager.employee_id
+            
+            # If notifying accused party, create a notification
+            if report.status == 'notified':
+                # Find the accused user (author of the reported content)
+                accused_user_id = None
+                if report.content_type == 'post':
+                    post = Forum_Posts.query.get(report.content_id)
+                    if post:
+                        accused_user_id = post.author_id
+                elif report.content_type == 'comment':
+                    comment = Forum_Comments.query.get(report.content_id)
+                    if comment:
+                        accused_user_id = comment.author_id
+                
+                if accused_user_id:
+                    # Create notification for accused user
+                    notification = User_Notifications(
+                        user_id=accused_user_id,
+                        title="Forum Content Report",
+                        message=f"Your {report.content_type} has been reported for: {report.reason}. A manager will review this matter. You may be contacted for more information.",
+                        type="forum_report",
+                        related_id=report.report_id
+                    )
+                    db.session.add(notification)
+        
+        db.session.commit()
+        
+        return jsonify({"success": True, "message": "Report updated successfully"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": "Failed to update report"}), 500
+
+# Get user notifications
+@app.route('/api/user/notifications', methods=['GET'])
+def get_user_notifications():
+    auth_header = request.headers.get('Authorization')
+    if not auth_header:
+        return jsonify({"success": False, "message": "Authentication required"}), 401
+    
+    try:
+        token = auth_header.split(' ')[1] if ' ' in auth_header else auth_header
+        payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+        user = Customers.query.filter_by(email=payload.get('email')).first()
+        
+        if not user:
+            return jsonify({"success": False, "message": "User not found"}), 404
+        
+        notifications = User_Notifications.query.filter_by(user_id=user.customer_id).order_by(User_Notifications.created_at.desc()).all()
+        
+        notifications_data = [{
+            "notification_id": n.notification_id,
+            "title": n.title,
+            "message": n.message,
+            "type": n.type,
+            "related_id": n.related_id,
+            "is_read": n.is_read,
+            "created_at": n.created_at.isoformat() if n.created_at else None
+        } for n in notifications]
+        
+        return jsonify({"success": True, "notifications": notifications_data}), 200
+    except Exception as e:
+        return jsonify({"success": False, "message": "Failed to get notifications"}), 500
+
+# Mark notification as read
+@app.route('/api/user/notifications/<int:notification_id>/read', methods=['PUT'])
+def mark_notification_read(notification_id):
+    auth_header = request.headers.get('Authorization')
+    if not auth_header:
+        return jsonify({"success": False, "message": "Authentication required"}), 401
+    
+    try:
+        token = auth_header.split(' ')[1] if ' ' in auth_header else auth_header
+        payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+        user = Customers.query.filter_by(email=payload.get('email')).first()
+        
+        if not user:
+            return jsonify({"success": False, "message": "User not found"}), 404
+        
+        notification = User_Notifications.query.filter_by(
+            notification_id=notification_id, 
+            user_id=user.customer_id
+        ).first()
+        
+        if not notification:
+            return jsonify({"success": False, "message": "Notification not found"}), 404
+        
+        notification.is_read = True
+        db.session.commit()
+        
+        return jsonify({"success": True, "message": "Notification marked as read"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": "Failed to mark notification as read"}), 500
 
 
 # Get all forum posts
