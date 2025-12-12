@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';
+import { Input } from './ui/input';
 import { useCart, MenuItem } from './CartContext';
-import { ShoppingCart, Check, Camera } from 'lucide-react';
+import { ShoppingCart, Check, Camera, Search } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
-import { api } from '../utils/api';
+import { api, UserProfile, isAuthenticated } from '../utils/api';
 import { ImageSearchModal } from './ImageSearchModal';
 
 // Menu Page component
@@ -18,8 +19,13 @@ export function MenuPage() {
   const [addedItems, setAddedItems] = useState<Set<string>>(new Set());
   // Track currently selected category filter
   const [selectedCategory, setSelectedCategory] = useState('All');
+  // Search term state
+  const [searchTerm, setSearchTerm] = useState('');
   // State for Image Search Modal
   const [isImageSearchOpen, setIsImageSearchOpen] = useState(false);
+  // User profile and login state
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   // Available filter categories
   const categories = ['All', 'Street Bites', 'Main Bowls', 'Snacks'];
@@ -42,6 +48,24 @@ export function MenuPage() {
     loadMenu();
   }, []);
 
+  // Load user profile if authenticated
+  useEffect(() => {
+    const loadProfile = async () => {
+      if (isAuthenticated()) {
+        try {
+          const response = await api.getProfile();
+          if (response.success && response.user) {
+            setUserProfile(response.user);
+            setIsLoggedIn(true);
+          }
+        } catch (err) {
+          console.error('Profile load error:', err);
+        }
+      }
+    };
+    loadProfile();
+  }, []);
+
   // Function to add item to cart and show temporary success feedback
   const handleAddToCart = (item: MenuItem) => {
     addToCart(item); // Add to cart
@@ -62,13 +86,17 @@ export function MenuPage() {
     return cart.some((cartItem) => cartItem.id === itemId);
   };
 
-  // Filter menu items based on selected category
+  // Filter menu items based on selected category and search term
   const filteredItems = menuItems.filter((item) => {
-    if (selectedCategory === 'All') return true;
-    if (selectedCategory === 'Street Bites') return ['1', '2'].includes(item.id);
-    if (selectedCategory === 'Main Bowls') return ['3', '4', '5', '6'].includes(item.id);
-    if (selectedCategory === 'Snacks') return ['7', '8'].includes(item.id);
-    return true;
+    const matchesCategory = selectedCategory === 'All' ||
+      (selectedCategory === 'Street Bites' && ['1', '2'].includes(item.id)) ||
+      (selectedCategory === 'Main Bowls' && ['3', '4', '5', '6'].includes(item.id)) ||
+      (selectedCategory === 'Snacks' && ['7', '8'].includes(item.id));
+    
+    const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.description.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    return matchesCategory && matchesSearch;
   });
 
   if (loading) {
@@ -91,6 +119,20 @@ export function MenuPage() {
 
       {/* Category Filter & AI Search Buttons */}
       <div className="flex flex-col sm:flex-row justify-center items-center gap-4 mb-8">
+        {/* Search Bar - Only visible to VIP customers */}
+        {isLoggedIn && userProfile?.is_vip && (
+          <div className="relative w-full max-w-md">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/50 w-4 h-4" />
+            <Input
+              type="text"
+              placeholder="Search dishes..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 bg-[#1a2f4a] border-[#00ff88]/20 text-white placeholder:text-white/40 focus:border-[#00ff88] focus:ring-[#00ff88]/20"
+            />
+          </div>
+        )}
+        
         <div className="flex gap-2 flex-wrap justify-center">
           {categories.map((category) => (
             <Button
@@ -104,13 +146,15 @@ export function MenuPage() {
           ))}
         </div>
         
-        {/* AI Image Search Button */}
-        <Button 
-            onClick={() => setIsImageSearchOpen(true)}
-            className="bg-purple-600 hover:bg-purple-700 text-white whitespace-nowrap shadow-lg hover:shadow-purple-500/20"
-        >
-            <Camera className="w-4 h-4 mr-2" /> AI Food Search
-        </Button>
+        {/* AI Image Search Button - Only visible to logged-in customers */}
+        {isLoggedIn && (
+          <Button 
+              onClick={() => setIsImageSearchOpen(true)}
+              className="bg-purple-600 hover:bg-purple-700 text-white whitespace-nowrap shadow-lg hover:shadow-purple-500/20"
+          >
+              <Camera className="w-4 h-4 mr-2" /> AI Food Search
+          </Button>
+        )}
       </div>
 
       {/* Menu Grid - displays filtered items */}
@@ -150,7 +194,7 @@ export function MenuPage() {
                 <div className="flex items-center gap-4 text-sm">
                   {item.chef_name && (
                     <span className="text-[#00ff88]/80">
-                      👨‍🍳 Chef: {item.chef_name}
+                      👨‍🍳 Chef: {item.chef_name} 
                     </span>
                   )}
                   {item.rating && (

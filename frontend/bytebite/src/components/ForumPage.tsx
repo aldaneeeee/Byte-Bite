@@ -5,15 +5,9 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { Separator } from './ui/separator';
-<<<<<<< Updated upstream
-import { MessageSquare, ThumbsUp, Send, Plus, User } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { api } from '../utils/api'; // Import api
-=======
 import { MessageSquare, ThumbsUp, Send, Plus, User, Calendar, Flag, X, Heart } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../utils/api';
->>>>>>> Stashed changes
 
 // Interface for forum post
 interface ForumPost {
@@ -53,6 +47,8 @@ export function ForumPage() {
   const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportForm, setReportForm] = useState({ contentId: '', contentType: '', reason: '' });
 
   const isLoggedIn = localStorage.getItem('authToken');
 
@@ -252,8 +248,6 @@ export function ForumPage() {
     }
   };
 
-<<<<<<< Updated upstream
-=======
   // Handle opening report modal
   const handleOpenReport = (contentId: string, contentType: 'post' | 'comment') => {
     setReportForm({
@@ -285,7 +279,6 @@ export function ForumPage() {
   };
 
   // Format date for display
->>>>>>> Stashed changes
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -406,6 +399,13 @@ export function ForumPage() {
                     <div className="flex items-center gap-1">
                       <MessageSquare className="w-4 h-4" /> {post.commentCount}
                     </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleOpenReport(post.id, 'post'); }}
+                      className="text-white/40 hover:text-red-400 transition-colors"
+                      title="Report post"
+                    >
+                      <Flag className="w-4 h-4" />
+                    </button>
                   </div>
                 </Card>
               ))
@@ -426,8 +426,6 @@ export function ForumPage() {
                       <div className="flex items-center gap-2 mb-2">
                         <span className="text-[#00ff88] font-bold text-xs">{comment.authorName}</span>
                         <span className="text-white/40 text-xs ml-auto">{formatDate(comment.createdAt)}</span>
-<<<<<<< Updated upstream
-=======
                         <button
                           onClick={(e) => { e.stopPropagation(); handleLikeComment(comment.id); }}
                           className={`flex items-center gap-1 hover:text-[#00ff88] transition-colors text-xs ${comment.isLiked ? 'text-[#00ff88]' : 'text-white/40'}`}
@@ -453,7 +451,6 @@ export function ForumPage() {
                         >
                           <Flag className="w-3 h-3" />
                         </button>
->>>>>>> Stashed changes
                       </div>
                       <p className="text-white/80 text-sm">{comment.content}</p>
                     </div>
@@ -482,6 +479,27 @@ export function ForumPage() {
           </div>
         </div>
       </div>
+
+      {/* Report Modal */}
+      {showReportModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
+          <Card className="bg-[#0f1f3a] border-[#00ff88]/20 max-w-md w-full p-6 relative">
+            <button onClick={() => setShowReportModal(false)} className="absolute top-4 right-4 text-white/50 hover:text-white"><X className="w-5 h-5"/></button>
+            <h3 className="text-xl font-bold text-white mb-6">Report Content</h3>
+            <form onSubmit={handleSubmitReport} className="space-y-4">
+              <textarea
+                value={reportForm.reason}
+                onChange={e => setReportForm({...reportForm, reason: e.target.value})}
+                placeholder="Reason for report"
+                className="w-full p-2 bg-[#1a2a3a] border border-[#00ff88]/20 rounded-md text-white"
+                required
+              />
+              <Button type="submit" className="bg-[#00ff88] text-[#0a1628]">Submit Report</Button>
+            </form>
+          </Card>
+        </div>
+      )}
+
     </div>
   );
 }

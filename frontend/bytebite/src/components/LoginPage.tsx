@@ -60,13 +60,13 @@ export function LoginPage() {
           phone_number: phoneNumber,
         });
         if (response.success) {
-          // Switch to login form after successful registration
+          // Switch to login form after successful registration request
           setIsLogin(true);
           setName('');
           setEmail('');
           setPassword('');
           setConfirmPassword('');
-          setError('Account created! Please log in.');
+          setError('Registration request submitted! Please wait for manager approval before logging in.');
         } else {
           setError(response.message || 'Registration failed');
         }
@@ -176,17 +176,6 @@ export function LoginPage() {
               </div>
             )}
 
-            {/* Forgot password link - only shown during login */}
-            {isLogin && (
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  className="text-sm text-[#00ff88] hover:underline"
-                >
-                  Forgot password?
-                </button>
-              </div>
-            )}
 
             {/* Submit button - text changes based on login/signup mode */}
             <Button

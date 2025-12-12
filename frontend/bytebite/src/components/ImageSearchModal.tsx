@@ -82,8 +82,8 @@ export function ImageSearchModal({ isOpen, onClose }: ImageSearchModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-[9999]">
-      <Card className="bg-[#0f1f3a] border border-[#00ff88]/30 w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col shadow-[0_0_50px_rgba(0,255,136,0.1)] rounded-2xl">
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-[9999]" onClick={onClose}>
+      <Card className="bg-[#0f1f3a] border border-[#00ff88]/30 w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col shadow-[0_0_50px_rgba(0,255,136,0.1)] rounded-2xl" onClick={(e) => e.stopPropagation()}>
         
         {/* Header */}
         <div className="p-4 border-b border-[#00ff88]/20 flex justify-between items-center bg-[#0a1628]/60">
@@ -91,9 +91,14 @@ export function ImageSearchModal({ isOpen, onClose }: ImageSearchModalProps) {
             <Sparkles className="text-[#00ff88] animate-pulse w-5 h-5" />
             AI Food Lens
           </h2>
-          <button onClick={onClose} className="text-white/50 hover:text-white transition-colors">
-            <X className="w-6 h-6" />
-          </button>
+          <Button 
+            onClick={onClose} 
+            variant="ghost" 
+            size="sm"
+            className="text-white/70 hover:text-white hover:bg-white/10 p-2"
+          >
+            <X className="w-5 h-5" />
+          </Button>
         </div>
 
         {/* Body */}

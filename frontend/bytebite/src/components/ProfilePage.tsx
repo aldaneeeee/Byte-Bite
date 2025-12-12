@@ -108,7 +108,10 @@ export function ProfilePage() {
       setSaving(true);
       setError(null);
       
-      const response = await api.updateProfile(formData as UpdateProfilePayload);
+      // Don't include deposited_cash in the update since it's not editable
+      const { deposited_cash, ...updateData } = formData;
+      
+      const response = await api.updateProfile(updateData as UpdateProfilePayload);
       if (response.success && response.user) {
         setProfile(response.user);
         setIsEditing(false);
@@ -271,9 +274,16 @@ export function ProfilePage() {
 
               <div>
                 <Label htmlFor="deposited_cash" className="text-white/70 text-sm">Deposited Cash Balance</Label>
-                <div className="mt-2 p-3 bg-[#0a1628] rounded-lg border border-[#00ff88]/10">
-                  <p className="text-[#00ff88] font-bold text-lg">${formData.deposited_cash.toFixed(2)}</p>
-                </div>
+                {isEditing ? (
+                  <div className="mt-2 p-3 bg-[#0a1628] rounded-lg border border-[#00ff88]/10">
+                    <p className="text-[#00ff88] font-bold text-lg">${formData.deposited_cash.toFixed(2)}</p>
+                    <p className="text-white/50 text-xs mt-1">Use "Add Funds" to modify balance</p>
+                  </div>
+                ) : (
+                  <div className="mt-2 p-3 bg-[#0a1628] rounded-lg border border-[#00ff88]/10">
+                    <p className="text-[#00ff88] font-bold text-lg">${formData.deposited_cash.toFixed(2)}</p>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -302,12 +312,12 @@ export function ProfilePage() {
                   {profile.is_vip && (
                     <div className="text-yellow-400/70 text-sm mt-1">
                       <p>Enjoy exclusive benefits and priority service</p>
-                      <p>Order count: {profile.order_count || 0} | Next free delivery: {((profile.order_count || 0) % 3) + 1} more orders</p>
+                      <p>Order count: {profile.order_count || 0}</p>
                     </div>
                   )}
                   {!profile.is_vip && (
                     <p className="text-gray-400 text-sm mt-1">
-                      Make 3 orders or deposit $100+ to become VIP
+                      Make 3 orders or spend $100+ to become VIP
                     </p>
                   )}
                 </div>

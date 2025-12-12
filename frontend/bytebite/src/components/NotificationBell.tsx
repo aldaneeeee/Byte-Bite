@@ -27,16 +27,21 @@ export function NotificationBell() {
     appealMessage: ''
   });
 
+  // Get token for reactivity
+  const customerToken = localStorage.getItem('authToken');
+
   const unreadCount = notifications.filter(n => !n.is_read).length;
 
   useEffect(() => {
-    loadNotifications();
-    
-    // Refresh notifications every 30 seconds
-    const interval = setInterval(loadNotifications, 30000);
-    
-    return () => clearInterval(interval);
-  }, []);
+    if (customerToken) {
+      loadNotifications();
+      
+      // Refresh notifications every 30 seconds
+      const interval = setInterval(loadNotifications, 30000);
+      
+      return () => clearInterval(interval);
+    }
+  }, [customerToken]);
 
   // Also refresh when opening the notification panel
   useEffect(() => {
@@ -120,10 +125,8 @@ export function NotificationBell() {
     setIsOpen(false); // Close notification panel when opening appeal modal
   };
 
-  // Only show if user is logged in (has token in localStorage)
-  const customerToken = localStorage.getItem('authToken');
-  const employeeToken = localStorage.getItem('employeeToken');
-  if (!customerToken && !employeeToken) return null;
+  // Only show if customer is logged in (employees don't use notifications)
+  if (!customerToken) return null;
 
   return (
     <div className="relative">

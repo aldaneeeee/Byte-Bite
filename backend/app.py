@@ -73,6 +73,19 @@ class Blacklist(db.Model):
     reason = db.Column(db.Text)
     date_added = db.Column(db.DateTime)
 
+class Registration_Requests(db.Model):
+    __tablename__ = 'Registration_Requests'
+    request_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    username = db.Column(db.String(50), nullable=False)
+    email = db.Column(db.String(100), nullable=False, unique=True)
+    password_hash = db.Column(db.String(255), nullable=False)
+    phone_number = db.Column(db.String(20))
+    status = db.Column(db.String(20), default='pending')  # 'pending', 'approved', 'denied'
+    reviewed_by = db.Column(db.Integer, db.ForeignKey('Employees.employee_id'))
+    reviewed_at = db.Column(db.DateTime)
+    denial_reason = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=utc_now)
+
 class Dishes(db.Model):
     __tablename__ = 'Dishes'
     dish_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
@@ -97,6 +110,8 @@ class Employees(db.Model):
     demotion_count = db.Column(db.Integer, default=0)
     complaint_count = db.Column(db.Integer, default=0)
     compliment_count = db.Column(db.Integer, default=0)
+    warning_count = db.Column(db.Integer, default=0)
+    consecutive_low_ratings = db.Column(db.Integer, default=0)
 
 class VIP_Customers(db.Model):
     __tablename__ = 'VIP_Customers'
@@ -192,25 +207,17 @@ class Financial_Log(db.Model):
     amount = db.Column(db.Numeric(10, 2), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-<<<<<<< Updated upstream
-=======
 # Forum models
->>>>>>> Stashed changes
 class Forum_Posts(db.Model):
     __tablename__ = 'Forum_Posts'
     post_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     customer_id = db.Column(db.Integer, db.ForeignKey('Customers.customer_id'), nullable=False)
     title = db.Column(db.String(200), nullable=False)
     content = db.Column(db.Text, nullable=False)
-<<<<<<< Updated upstream
-    category = db.Column(db.String(50), default='general')
-    created_at = db.Column(db.DateTime, default=utc_now)
-=======
     category = db.Column(db.String(50), nullable=False)
     likes = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=utc_now)
     updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
->>>>>>> Stashed changes
 
 class Forum_Comments(db.Model):
     __tablename__ = 'Forum_Comments'
@@ -225,8 +232,6 @@ class Forum_Likes(db.Model):
     like_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     post_id = db.Column(db.Integer, db.ForeignKey('Forum_Posts.post_id'), nullable=False)
     customer_id = db.Column(db.Integer, db.ForeignKey('Customers.customer_id'), nullable=False)
-<<<<<<< Updated upstream
-=======
 class Forum_Comment_Likes(db.Model):
     __tablename__ = 'Forum_Comment_Likes'
     like_id = db.Column(db.Integer, primary_key=True, autoincrement=True)
@@ -289,7 +294,6 @@ class Complaints(db.Model):
     appeal_message = db.Column(db.Text)
     disputed_at = db.Column(db.DateTime)
     dispute_reason = db.Column(db.Text)
->>>>>>> Stashed changes
 
 def resolve_expired_biddings():
     """
@@ -544,23 +548,22 @@ def get_menu():
         # VIP customers see all dishes
         dishes = Dishes.query.all()
     else:
-<<<<<<< Updated upstream
         # Non-VIP customers and visitors only see non-VIP dishes
-=======
-        # Non-VIP users and visitors only see non-VIP dishes
->>>>>>> Stashed changes
         dishes = Dishes.query.filter_by(is_vip=False).all()
     
     menu_items = []
     for dish in dishes:
-        # Get chef name and image if chef_id exists
+        # Get chef name, image, and order count if chef_id exists
         chef_name = None
         chef_image = None
+        chef_order_count = None
         if dish.chef_id:
             chef = Employees.query.filter_by(employee_id=dish.chef_id).first()
             if chef:
                 chef_name = chef.name
                 chef_image = chef.profile_image_url
+                # Count orders assigned to this chef
+                chef_order_count = Orders.query.filter_by(chef_id=dish.chef_id).count()
         
         # Calculate average rating for this dish
         avg_rating = None
@@ -585,6 +588,7 @@ def get_menu():
             'is_vip': dish.is_vip,
             'chef_name': chef_name,
             'chef_image': chef_image,
+            'chef_order_count': chef_order_count,
             'rating': avg_rating
         }
         menu_items.append(item)
@@ -595,6 +599,14 @@ def get_menu():
         pass
     
     return jsonify(menu_items)
+
+
+# Public endpoints for home page (no authentication required)
+
+
+
+
+
 
 
 # User registration
@@ -630,24 +642,34 @@ def register():
             conflicts.append('email')
         return jsonify({"success": False, "message": f"{' and '.join(conflicts)} already in use"}), 409
 
+    # Check for existing registration request
+    existing_request = Registration_Requests.query.filter((Registration_Requests.username == username) | (Registration_Requests.email == email)).first()
+    if existing_request:
+        if existing_request.status == 'pending':
+            return jsonify({"success": False, "message": "Registration request already pending approval"}), 409
+        elif existing_request.status == 'approved':
+            return jsonify({"success": False, "message": "Email or username already registered"}), 409
+        # If denied, allow new request
+
     # Hash password
     password_hash = generate_password_hash(password)
-    # Insert new user
+    
+    # Create registration request instead of user
     try:
-        new_user = Customers(
+        new_request = Registration_Requests(
             username=username,
             email=email,
             password_hash=password_hash,
             phone_number=phone_number
         )
-        db.session.add(new_user)
+        db.session.add(new_request)
         db.session.commit()
-        user_id = new_user.customer_id
+        request_id = new_request.request_id
     except Exception as e:
         db.session.rollback()
-        return jsonify({"success": False, "message": "Failed to create user", "error": str(e)}), 500
+        return jsonify({"success": False, "message": "Failed to submit registration request", "error": str(e)}), 500
 
-    return jsonify({"success": True, "message": "User registered successfully", "user": {"id": user_id, "username": username, "email": email}}), 201
+    return jsonify({"success": True, "message": "Registration request submitted successfully. Please wait for manager approval.", "request_id": request_id}), 201
 
 
 # User login
@@ -918,7 +940,6 @@ def delete_employee(employee_id):
 # Get all customers (for management)
 @app.route('/api/manager/customers', methods=['GET'])
 @require_role('Manager')
-<<<<<<< Updated upstream
 def get_customers():
     customers = Customers.query.all()
     customer_list = []
@@ -942,7 +963,6 @@ def get_customers():
             "is_blacklisted": cust.is_blacklisted
         })
     return jsonify({"success": True, "customers": customer_list}), 200
-=======
 def manage_customers():
     if request.method == 'GET':
         customers = Customers.query.all()
@@ -992,7 +1012,6 @@ def manage_customers():
 
         else:
             return jsonify({"success": False, "message": "Invalid action"}), 400 
->>>>>>> Stashed changes
 
 
     return jsonify({"success": True, "customers": customer_list}), 200
@@ -1135,18 +1154,52 @@ def add_customer_warning(customer_id):
         # Increment warning count
         customer.warning_count += 1
         
-        # Auto-demote VIP customers after 2 warnings
-        if customer.warning_count >= 2:
+        # Check if customer is VIP
+        is_vip = VIP_Customers.query.filter_by(customer_id=customer.customer_id).first() is not None
+        
+        # At 2 warnings: demote VIP customers to regular customers
+        if customer.warning_count >= 2 and is_vip:
             vip_record = VIP_Customers.query.filter_by(customer_id=customer.customer_id).first()
             if vip_record:
                 db.session.delete(vip_record)
-                customer.warning_count = 0
+                customer.warning_count = 0  # Reset warnings after demotion
         
-        # Auto-blacklist after 3 warnings
-        if customer.warning_count >= 3:
+        # At 3 warnings: blacklist regular customers
+        if customer.warning_count >= 3 and not is_vip:
             customer.is_blacklisted = True
+            
+            # Add to blacklist table
+            blacklist_entry = Blacklist(
+                customer_id=customer.customer_id,
+                email=customer.email,
+                reason="Auto-blacklisted after 3 warnings",
+                date_added=datetime.now(timezone.utc)
+            )
+            db.session.add(blacklist_entry)
+            
+            # Create notification for the customer
+            notification = User_Notifications(
+                user_id=customer.customer_id,
+                title="Account Deregistered",
+                message="Your account has been deregistered due to multiple warnings. Please contact management for further assistance.",
+                type="system",
+                created_at=datetime.now(timezone.utc)
+            )
+            db.session.add(notification)
+            
+            # Create warning record
+            warning = Warnings(
+                customer_id=customer_id,
+                reason="Warning issued by manager - account deregistered",
+                created_at=datetime.utcnow()
+            )
+            db.session.add(warning)
+            
+            db.session.commit()
+            
+            return jsonify({"success": True, "message": "Warning added successfully. Customer has been blacklisted and notified of deregistration."}), 200
         
-        # Create warning record
+        # If not deregistered, create warning record
         warning = Warnings(
             customer_id=customer_id,
             reason="Warning issued by manager",
@@ -1211,7 +1264,12 @@ def manager_assign_order():
     employee_id = data.get('employee_id') # The employee chosen by manager
     memo = data.get('memo')
     
+    if not memo or not memo.strip():
+        return jsonify({"success": False, "message": "Memo is required when manually assigning orders"}), 400
+    
     bidding = Delivery_Bids.query.get(bidding_id)
+    if not bidding or bidding.status != 'active':
+        return jsonify({"success": False, "message": "Bidding session not active"}), 400
     if not bidding or bidding.status != 'active':
         return jsonify({"success": False, "message": "Bidding session not active"}), 400
         
@@ -1239,6 +1297,79 @@ def manager_assign_order():
     except Exception as e:
         db.session.rollback()
         return jsonify({"success": False, "message": "Assignment failed", "error": str(e)}), 500
+
+
+# Get pending registration requests
+@app.route('/api/manager/registration-requests', methods=['GET'])
+@require_role('Manager')
+def get_registration_requests():
+    requests = Registration_Requests.query.filter_by(status='pending').all()
+    request_list = []
+    for req in requests:
+        request_list.append({
+            "request_id": req.request_id,
+            "username": req.username,
+            "email": req.email,
+            "phone_number": req.phone_number,
+            "created_at": req.created_at.isoformat() if req.created_at else None
+        })
+    return jsonify({"success": True, "requests": request_list}), 200
+
+
+# Approve or deny registration request
+@app.route('/api/manager/registration-requests/<int:request_id>', methods=['PUT'])
+@require_role('Manager')
+def review_registration_request(request_id):
+    data = request.get_json()
+    action = data.get('action')  # 'approve' or 'deny'
+    denial_reason = data.get('denial_reason', '')
+
+    # Get manager ID from token
+    auth_header = request.headers.get('Authorization')
+    token = auth_header.split(' ')[1] if ' ' in auth_header else auth_header
+    payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+    email = payload.get('email')
+    manager = Employees.query.filter_by(email=email).first()
+
+    request_record = Registration_Requests.query.get(request_id)
+    if not request_record:
+        return jsonify({"success": False, "message": "Registration request not found"}), 404
+
+    if request_record.status != 'pending':
+        return jsonify({"success": False, "message": "Request has already been reviewed"}), 400
+
+    try:
+        if action == 'approve':
+            # Check if email/username still available
+            existing = Customers.query.filter((Customers.username == request_record.username) | (Customers.email == request_record.email)).first()
+            if existing:
+                return jsonify({"success": False, "message": "Email or username no longer available"}), 400
+
+            # Create the customer account
+            new_customer = Customers(
+                username=request_record.username,
+                email=request_record.email,
+                password_hash=request_record.password_hash,
+                phone_number=request_record.phone_number
+            )
+            db.session.add(new_customer)
+            
+            # Update request status
+            request_record.status = 'approved'
+            request_record.reviewed_by = manager.employee_id
+            request_record.reviewed_at = datetime.now(timezone.utc)
+            
+        elif action == 'deny':
+            db.session.delete(request_record)
+        else:
+            return jsonify({"success": False, "message": "Invalid action"}), 400
+
+        db.session.commit()
+        return jsonify({"success": True, "message": f"Registration request {action}d successfully"}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": f"Failed to {action} request", "error": str(e)}), 500
 
 
 # Chef endpoints
@@ -1698,15 +1829,18 @@ def create_order():
             # Record warning for insufficient balance
             user.warning_count = (user.warning_count or 0) + 1
             
-            # Auto-demote VIP customers after 2 warnings
-            if user.warning_count >= 2:
+            # Check if user is VIP
+            is_vip = VIP_Customers.query.filter_by(customer_id=user.customer_id).first() is not None
+            
+            # At 2 warnings: demote VIP customers to regular customers
+            if user.warning_count >= 2 and is_vip:
                 vip_record = VIP_Customers.query.filter_by(customer_id=user.customer_id).first()
                 if vip_record:
                     db.session.delete(vip_record)
-                    user.warning_count = 0
+                    user.warning_count = 0  # Reset warnings after demotion
             
-            # Auto-blacklist after 3 warnings
-            if user.warning_count >= 3:
+            # At 3 warnings: blacklist regular customers
+            if user.warning_count >= 3 and not is_vip:
                 user.is_blacklisted = True
             
             db.session.commit()
@@ -2335,7 +2469,7 @@ def create_review():
                 chef.reputation_score = round(Decimal(avg_chef_rating), 2)
                 
                 # Evaluate chef performance after rating update
-                evaluate_employee_performance(chef)
+                # evaluate_employee_performance(chef)  # Moved to after complaint processing
 
         # 3. Update Delivery Person's Reputation Score
         if order.delivery_person_id:
@@ -2347,6 +2481,9 @@ def create_review():
                 delivery_person = Employees.query.get(order.delivery_person_id)
                 # Convert to Decimal and round to 2 decimal places
                 delivery_person.reputation_score = round(Decimal(avg_delivery_rating), 2)
+                
+                # Evaluate delivery person performance after rating update
+                # evaluate_employee_performance(delivery_person)  # Moved to after complaint processing
 
         # Commit the updates to employee scores
         db.session.commit()
@@ -2383,11 +2520,7 @@ def create_review():
                 related_order_id=order_id
             )
             db.session.add(chef_complaint)
-            # Increment chef's complaint_count
-            chef = Employees.query.get(order.chef_id)
-            if chef:
-                chef.complaint_count += multiplier
-                db.session.add(chef)
+
 
         if compliment_delivery and order.delivery_person_id:
             delivery_compliment = Complaints(
@@ -2420,11 +2553,7 @@ def create_review():
                 related_order_id=order_id
             )
             db.session.add(delivery_complaint)
-            # Increment delivery's complaint_count
-            delivery_person = Employees.query.get(order.delivery_person_id)
-            if delivery_person:
-                delivery_person.complaint_count += multiplier
-                db.session.add(delivery_person)
+
 
         db.session.commit()
 
@@ -2580,15 +2709,10 @@ def get_featured_chefs():
                 except Exception as e:
                     chef['rating'] = None
             
-            if chef.get('total_orders') is None and chef.get('total_dishes') is None:
+            if chef.get('total_orders') is None:
                 # Calculate total orders or dishes
                 try:
-                    orders_result = db.session.query(db.func.count(Order_Items.order_id)).\
-                        join(Dishes, Order_Items.dish_id == Dishes.dish_id)\
-                        .join(Orders, Order_Items.order_id == Orders.order_id)\
-                        .filter(Dishes.chef_id == chef['employee_id'])\
-                        .filter(Orders.status == 'Delivered')\
-                        .scalar()
+                    orders_result = Orders.query.filter_by(chef_id=chef['employee_id']).count()
                     chef['total_orders'] = orders_result or 0
                 except Exception as e:
                     chef['total_orders'] = 0
@@ -2630,30 +2754,38 @@ def get_recent_orders():
                 .limit(6)\
                 .all()
         else:
-            # Return general recent orders for display (when not logged in)
-            orders = Orders.query\
-                .filter(Orders.status.in_(['Delivered', 'In Transit', 'Ready for Delivery']))\
+            # Return recent public orders (anonymized)
+            orders = Orders.query.filter_by(status='completed')\
                 .order_by(Orders.order_time.desc())\
-                .limit(6)\
+                .limit(5)\
                 .all()
         
         orders_data = []
         for order in orders:
-            # Get customer name
-            customer = Customers.query.get(order.customer_id)
-            customer_name = customer.username if customer else "Unknown Customer"
-            
-            # Get order items count
-            items_count = Order_Items.query.filter_by(order_id=order.order_id).count()
-            
-            orders_data.append({
-                'order_id': order.order_id,
-                'customer_name': customer_name,
-                'items_count': items_count,
-                'total': float(order.total_price),
-                'date': order.order_time.isoformat() if order.order_time else None,
-                'status': order.status
-            })
+            try:
+                if customer_id:
+                    # Authenticated: show full customer name
+                    customer = Customers.query.get(order.customer_id)
+                    customer_name = customer.username if customer else "Unknown Customer"
+                else:
+                    # Public: anonymize customer name
+                    customer = Customers.query.get(order.customer_id)
+                    customer_name = f"{customer.username[0]}***" if customer and customer.username else "Anonymous"
+                
+                # Get order items count
+                items_count = Order_Items.query.filter_by(order_id=order.order_id).count()
+                
+                orders_data.append({
+                    'order_id': order.order_id,
+                    'customer_name': customer_name,
+                    'items_count': items_count,
+                    'total': float(order.total_price),
+                    'date': (order.order_time or order.created_at).isoformat() if (order.order_time or order.created_at) else None,
+                    'status': order.status
+                })
+            except Exception as e:
+                print(f"Error processing order {order.order_id}: {e}")
+                continue
         
         return jsonify({"success": True, "orders": orders_data}), 200
     except Exception as e:
@@ -2698,8 +2830,6 @@ def get_recommendations():
         print(f"Error in get_recommendations: {e}")
         return jsonify({"success": False, "message": "Failed to fetch recommendations"}), 500
 
-<<<<<<< Updated upstream
-=======
 
 def get_personalized_recommendations(customer_id):
     """Get personalized recommendations based on user's order history"""
@@ -2986,15 +3116,18 @@ def update_report_status(report_id):
                         # Add warnings based on weight
                         accused_customer.warning_count += weight
                         
-                        # Auto-demote VIP customers after 2 warnings
-                        if accused_customer.warning_count >= 2:
+                        # Check if accused is VIP
+                        accused_is_vip = VIP_Customers.query.filter_by(customer_id=accused_customer.customer_id).first() is not None
+                        
+                        # At 2 warnings: demote VIP customers to regular customers
+                        if accused_customer.warning_count >= 2 and accused_is_vip:
                             vip_record = VIP_Customers.query.filter_by(customer_id=accused_customer.customer_id).first()
                             if vip_record:
                                 db.session.delete(vip_record)
-                                accused_customer.warning_count = 0
+                                accused_customer.warning_count = 0  # Reset warnings after demotion
                         
-                        # Auto-blacklist after 3 warnings
-                        if accused_customer.warning_count >= 3:
+                        # At 3 warnings: blacklist regular customers
+                        if accused_customer.warning_count >= 3 and not accused_is_vip:
                             accused_customer.is_blacklisted = True
                         
                         # Create warning records
@@ -3141,15 +3274,18 @@ def review_forum_report_appeal(report_id):
                 # Increment warning count by 2
                 reporter.warning_count += 2
                 
-                # Auto-demote VIP customers after 2 warnings
-                if reporter.warning_count >= 2:
+                # Check if reporter is VIP
+                reporter_is_vip = VIP_Customers.query.filter_by(customer_id=reporter.customer_id).first() is not None
+                
+                # At 2 warnings: demote VIP customers to regular customers
+                if reporter.warning_count >= 2 and reporter_is_vip:
                     vip_record = VIP_Customers.query.filter_by(customer_id=reporter.customer_id).first()
                     if vip_record:
                         db.session.delete(vip_record)
-                        reporter.warning_count = 0
+                        reporter.warning_count = 0  # Reset warnings after demotion
                 
-                # Auto-blacklist after 3 warnings
-                if reporter.warning_count >= 3:
+                # At 3 warnings: blacklist regular customers
+                if reporter.warning_count >= 3 and not reporter_is_vip:
                     reporter.is_blacklisted = True
                 
                 # Create two warning records
@@ -3161,69 +3297,66 @@ def review_forum_report_appeal(report_id):
                     )
                     db.session.add(warning)
         elif decision == 'uphold':
+            # Check if report was already resolved (warnings already added)
+            was_already_resolved = report.status == 'resolved'
             report.status = 'upheld'
-            # Add 1 warning to the accused (author of the reported content)
-            try:
-                # Get the author based on content_type and content_id
-                accused_username = None
-                if report.content_type == 'post':
-                    post = Forum_Posts.query.get(report.content_id)
-                    if post:
-                        customer = Customers.query.get(post.customer_id)
-                        accused_username = customer.username if customer else None
-                elif report.content_type == 'comment':
-                    comment = Forum_Comments.query.get(report.content_id)
-                    if comment:
-                        customer = Customers.query.get(comment.customer_id)
-                        accused_username = customer.username if customer else None
+            
+            # Only add warnings if not already added during initial resolution
+            if not was_already_resolved:
+                # Check if reporter is VIP - if so, accused gets 2 warnings instead of 1
+                reporter = Customers.query.get(report.reporter_id)
+                is_reporter_vip = False
+                if reporter:
+                    vip_record = VIP_Customers.query.filter_by(customer_id=reporter.customer_id).first()
+                    is_reporter_vip = vip_record is not None
                 
-                if accused_username:
-                    accused = Customers.query.filter_by(username=accused_username).first()
-                    if accused:
-                        accused.warning_count += 1
-                        
-                        # Auto-demote VIP customers after 2 warnings
-                        if accused.warning_count >= 2:
-                            vip_record = VIP_Customers.query.filter_by(customer_id=accused.customer_id).first()
-                            if vip_record:
-                                db.session.delete(vip_record)
-                        
-                        # Auto-blacklist after 3 warnings
-                        if accused.warning_count >= 3:
-                            accused.is_blacklisted = True
-                        
-                        # Create a warning record
-                        warning = Warnings(
-                            customer_id=accused.customer_id,
-                            reason="Warning for upheld forum report appeal",
-                            created_at=datetime.now(timezone.utc)
-                        )
-                        db.session.add(warning)
-            except Exception as e:
-                print(f"Error processing upheld appeal: {e}")
-                return jsonify({"success": False, "message": "Error processing appeal"}), 500
-                accused = Customers.query.filter_by(username=accused_username).first()
-                if accused:
-                    accused.warning_count += 1
+                warnings_to_add = 2 if is_reporter_vip else 1
+                
+                # Add warnings to the accused (author of the reported content)
+                try:
+                    # Get the author based on content_type and content_id
+                    accused_username = None
+                    if report.content_type == 'post':
+                        post = Forum_Posts.query.get(report.content_id)
+                        if post:
+                            customer = Customers.query.get(post.customer_id)
+                            accused_username = customer.username if customer else None
+                    elif report.content_type == 'comment':
+                        comment = Forum_Comments.query.get(report.content_id)
+                        if comment:
+                            customer = Customers.query.get(comment.customer_id)
+                            accused_username = customer.username if customer else None
                     
-                    # Auto-demote VIP customers after 2 warnings
-                    if accused.warning_count >= 2:
-                        vip_record = VIP_Customers.query.filter_by(customer_id=accused.customer_id).first()
-                        if vip_record:
-                            db.session.delete(vip_record)
-                            accused.warning_count = 0
-                    
-                    # Auto-blacklist after 3 warnings
-                    if accused.warning_count >= 3:
-                        accused.is_blacklisted = True
-                    
-                    # Create a warning record
-                    warning = Warnings(
-                        customer_id=accused.customer_id,
-                        reason="Warning for upheld forum report appeal",
-                        created_at=datetime.now(timezone.utc)
-                    )
-                    db.session.add(warning)
+                    if accused_username:
+                        accused = Customers.query.filter_by(username=accused_username).first()
+                        if accused:
+                            accused.warning_count += warnings_to_add
+                            
+                            # Check if accused is VIP
+                            accused_is_vip = VIP_Customers.query.filter_by(customer_id=accused.customer_id).first() is not None
+                            
+                            # At 2 warnings: demote VIP customers to regular customers
+                            if accused.warning_count >= 2 and accused_is_vip:
+                                vip_record = VIP_Customers.query.filter_by(customer_id=accused.customer_id).first()
+                                if vip_record:
+                                    db.session.delete(vip_record)
+                                    accused.warning_count = 0  # Reset warnings after demotion
+                            
+                            # At 3 warnings: blacklist regular customers
+                            if accused.warning_count >= 3 and not accused_is_vip:
+                                accused.is_blacklisted = True
+                            
+                            # Create warning records
+                            for _ in range(warnings_to_add):
+                                warning = Warnings(
+                                    customer_id=accused.customer_id,
+                                    reason="Warning for upheld forum report appeal",
+                                    created_at=datetime.now(timezone.utc)
+                                )
+                                db.session.add(warning)
+                except Exception as e:
+                    print(f"Error processing upheld appeal: {e}")
+                    return jsonify({"success": False, "message": "Error processing appeal"}), 500
         
         report.reviewed_at = datetime.now(timezone.utc)
         report.reviewed_by = manager.employee_id
@@ -3319,7 +3452,6 @@ def mark_notification_read(notification_id):
         db.session.rollback()
         return jsonify({"success": False, "message": "Failed to mark notification as read"}), 500
 
->>>>>>> Stashed changes
 
 # Get all forum posts
 @app.route('/api/forum/posts', methods=['GET'])
@@ -3445,7 +3577,7 @@ def like_forum_comment(comment_id):
     db.session.commit()
     return jsonify({"success": True, "action": action}), 200
 
-# Give compliment to a post (one-time, decreases warnings by 1 if > 0)
+# Give compliment to a post (one-time, decreases warnings by 1 or 2 if VIP)
 @app.route('/api/forum/posts/<int:post_id>/compliment', methods=['POST'])
 def compliment_forum_post(post_id):
     auth_header = request.headers.get('Authorization')
@@ -3457,6 +3589,10 @@ def compliment_forum_post(post_id):
         user = Customers.query.filter_by(email=payload.get('email')).first()
     except: return jsonify({"success": False, "message": "Invalid token"}), 401
 
+    # Check if customer is VIP
+    is_vip = VIP_Customers.query.filter_by(customer_id=user.customer_id).first() is not None
+    multiplier = 2 if is_vip else 1
+
     # Check if already complimented
     existing = Forum_Post_Compliments.query.filter_by(post_id=post_id, customer_id=user.customer_id).first()
     if existing:
@@ -3467,7 +3603,7 @@ def compliment_forum_post(post_id):
     if post:
         poster = Customers.query.get(post.customer_id)
         if poster and poster.warning_count > 0:
-            poster.warning_count -= 1
+            poster.warning_count -= multiplier
             db.session.add(poster)
     
     # Save compliment
@@ -3477,7 +3613,7 @@ def compliment_forum_post(post_id):
     db.session.commit()
     return jsonify({"success": True, "message": "Compliment given"}), 200
 
-# Give compliment to a comment (one-time, decreases warnings by 1 if > 0)
+# Give compliment to a comment (one-time, decreases warnings by 1 or 2 if VIP)
 @app.route('/api/forum/comments/<int:comment_id>/compliment', methods=['POST'])
 def compliment_forum_comment(comment_id):
     auth_header = request.headers.get('Authorization')
@@ -3489,6 +3625,10 @@ def compliment_forum_comment(comment_id):
         user = Customers.query.filter_by(email=payload.get('email')).first()
     except: return jsonify({"success": False, "message": "Invalid token"}), 401
 
+    # Check if customer is VIP
+    is_vip = VIP_Customers.query.filter_by(customer_id=user.customer_id).first() is not None
+    multiplier = 2 if is_vip else 1
+
     # Check if already complimented
     existing = Forum_Comment_Compliments.query.filter_by(comment_id=comment_id, customer_id=user.customer_id).first()
     if existing:
@@ -3499,7 +3639,7 @@ def compliment_forum_comment(comment_id):
     if comment:
         commenter = Customers.query.get(comment.customer_id)
         if commenter and commenter.warning_count > 0:
-            commenter.warning_count -= 1
+            commenter.warning_count -= multiplier
             db.session.add(commenter)
     
     # Save compliment
@@ -3617,12 +3757,12 @@ def chat_with_ai():
         You are the helpful AI assistant for 'Byte & Bite', a tech-themed street food restaurant.
         
         Your Goal:
-        Answer user questions accurately based ONLY on the provided "Official Knowledge Base" and "Current Menu".
+        Answer user questions accurately based on the provided "Official Knowledge Base" and "Current Menu".
         
         Instructions:
         1. Check the Knowledge Base for VIP, delivery, or policy questions.
         2. Check the Menu for food questions.
-        3. If the answer is not found, ask them to contact the manager.
+        3. If the answer is not found, try your best to answer the question.
         4. Keep answers concise.
         
         === Official Knowledge Base ===
@@ -3730,7 +3870,7 @@ def search_food_by_image():
         print(f"[Image Search] AI identified: '{result_text}'")
         
         # Get all dishes for reference
-        all_dishes = Dishes.query.all()
+        all_dishes = Dishes.query.all() 
         print(f"[Image Search] Total dishes in DB: {len(all_dishes)}")
         
         # Simple but effective search: try multiple variations
@@ -4179,23 +4319,36 @@ def evaluate_employee_performance(employee):
     should_demote = False
     
     # Condition 1: 3 or more complaints
-    if employee.complaint_count >= 3:
+    if employee.complaint_count >= 3:       
         should_demote = True
     
-    # Condition 2: For chefs - consistently low ratings (<2 average)
+    # Condition 2: 3 consecutive <2 star ratings cause demotion for both chefs and delivery drivers
+    # Get the latest rating for this employee
+    latest_rating = None
     if employee.role == 'Chef':
-        # Calculate average rating for chef's dishes
-        avg_rating = db.session.query(db.func.avg(Reviews.dish_rating)).\
+        latest_rating = db.session.query(Reviews.dish_rating).\
             join(Order_Items, Reviews.order_id == Order_Items.order_id).\
             join(Dishes, Order_Items.dish_id == Dishes.dish_id).\
             filter(Dishes.chef_id == employee.employee_id).\
-            scalar()
-        
-        if avg_rating and avg_rating < 2.0:
-            should_demote = True
+            order_by(Reviews.created_at.desc()).\
+            first()
+    elif employee.role == 'Delivery':
+        latest_rating = db.session.query(Reviews.delivery_rating).\
+            join(Orders, Reviews.order_id == Orders.order_id).\
+            filter(Orders.delivery_person_id == employee.employee_id).\
+            order_by(Reviews.created_at.desc()).\
+            first()
     
-    # Condition 3: For delivery people - could add similar rating checks if needed
-    # (Currently only complaint-based for delivery people)
+    if latest_rating:
+        if latest_rating[0] < 2:
+            employee.consecutive_low_ratings += 1
+        else:
+            employee.consecutive_low_ratings = 0
+        
+        if employee.consecutive_low_ratings >= 3:
+            should_demote = True
+            employee.consecutive_low_ratings = 0  # Reset counter after demotion
+    
     
     if should_demote:
         employee.demotion_count += 1
@@ -4205,20 +4358,38 @@ def evaluate_employee_performance(employee):
         if employee.demotion_count >= 2:
             employee.status = 'Fired'
     
-    # Check for bonus conditions (3 compliments)
-    if employee.compliment_count >= 3:
-        # Reset complaint count or give bonus (not tracking salary)
-        employee.complaint_count = 0
-        # Decrement demotion count as promotion reward
-        employee.demotion_count = max(0, employee.demotion_count - 1)
+    # Check for bonus conditions
+    if employee.compliment_count > 0:
+        # Each compliment cancels one complaint
+        employee.complaint_count = max(0, employee.complaint_count - employee.compliment_count)
+        
+        # Every 3 compliments = 1 promotion (cancels 1 demotion)
+        promotions = employee.compliment_count // 3
+        if promotions > 0:
+            employee.demotion_count = max(0, employee.demotion_count - promotions)
+        
+        # Reset compliment count after processing
+        employee.compliment_count = 0
     
-    # Condition 2: For chefs - high ratings (>4 average)
+    # Condition 2: High ratings (>4 average) cause promotion for both chefs and delivery drivers
     if employee.role == 'Chef':
         # Calculate average rating for chef's dishes
         avg_rating = db.session.query(db.func.avg(Reviews.dish_rating)).\
             join(Order_Items, Reviews.order_id == Order_Items.order_id).\
             join(Dishes, Order_Items.dish_id == Dishes.dish_id).\
             filter(Dishes.chef_id == employee.employee_id).\
+            scalar()
+        
+        if avg_rating and avg_rating > 4.0:
+            # Give bonus (not tracking salary, could reset complaint count or other benefits)
+            employee.complaint_count = max(0, employee.complaint_count - 1)  # Reduce complaints as bonus
+            # Decrement demotion count as promotion reward
+            employee.demotion_count = max(0, employee.demotion_count - 1)
+    elif employee.role == 'Delivery':
+        # Calculate average delivery rating for delivery driver
+        avg_rating = db.session.query(db.func.avg(Reviews.delivery_rating)).\
+            join(Orders, Reviews.order_id == Orders.order_id).\
+            filter(Orders.delivery_person_id == employee.employee_id).\
             scalar()
         
         if avg_rating and avg_rating > 4.0:
@@ -4281,28 +4452,27 @@ def review_complaint(complaint_id):
                     if accused_customer:
                         accused_customer.warning_count += 1
                         
-                        # Auto-demote VIP customers after 2 warnings
-                        if accused_customer.warning_count >= 2:
+                        # Check if accused is VIP
+                        accused_is_vip = VIP_Customers.query.filter_by(customer_id=accused_customer.customer_id).first() is not None
+                        
+                        # At 2 warnings: demote VIP customers to regular customers
+                        if accused_customer.warning_count >= 2 and accused_is_vip:
                             vip_record = VIP_Customers.query.filter_by(customer_id=accused_customer.customer_id).first()
                             if vip_record:
                                 db.session.delete(vip_record)
-                                accused_customer.warning_count = 0
+                                accused_customer.warning_count = 0  # Reset warnings after demotion
                         
-                        # Auto-blacklist after 3 warnings
-                        if accused_customer.warning_count >= 3:
+                        # At 3 warnings: blacklist regular customers
+                        if accused_customer.warning_count >= 3 and not accused_is_vip:
                             accused_customer.is_blacklisted = True
                             
                 elif complaint.accused_type in ['chef', 'delivery']:
-                    # Handle employee complaints
-                    accused_employee = Employees.query.get(complaint.accused_id)
-                    if accused_employee:
-                        accused_employee.complaint_count += weight
-                        # Evaluate performance after complaint
-                        evaluate_employee_performance(accused_employee)
+                    # Handle employee complaints - penalties applied when employee accepts or appeal deadline passes
+                    pass  # Employee must accept complaint or appeal it
                         
             elif complaint.complaint_type == 'compliment':
                 if complaint.accused_type in ['chef', 'delivery']:
-                    # Handle employee compliments
+                    # Handle employee compliments - apply immediately since they're positive
                     accused_employee = Employees.query.get(complaint.accused_id)
                     if accused_employee:
                         accused_employee.complaint_count = max(0, accused_employee.complaint_count - weight)
@@ -4372,6 +4542,62 @@ def dispute_complaint(complaint_id):
         print(e)
         return jsonify({"success": False, "message": "Database error"}), 500
 
+@app.route('/api/complaints/<int:complaint_id>/accept', methods=['POST'])
+def accept_complaint(complaint_id):
+    """Allow accused employee to accept a complaint and apply penalties immediately"""
+    try:
+        token = request.headers.get('Authorization').split(' ')[1]
+        payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+        accused_email = payload.get('email')
+    except Exception as e:
+        return jsonify({"success": False}), 401
+
+    try:
+        # Get accused employee
+        accused = Employees.query.filter_by(email=accused_email).first()
+        if not accused:
+            return jsonify({"success": False, "message": "Employee not found"}), 404
+
+        complaint = Complaints.query.get(complaint_id)
+        if not complaint:
+            return jsonify({"success": False, "message": "Complaint not found"}), 404
+
+        # Verify accused is the target of this complaint
+        if complaint.accused_id != accused.employee_id or complaint.accused_type not in ['chef', 'delivery']:
+            return jsonify({"success": False, "message": "Unauthorized"}), 403
+
+        if complaint.status not in ['upheld', 'pending', 'notified', 'resolved']:
+            return jsonify({"success": False, "message": f"Can only accept pending, notified, upheld, or resolved complaints, current status: {complaint.status}"}), 400
+
+        # Get complainant for VIP weighting
+        complainant_is_vip = False
+        if complaint.complainant_type == 'customer':
+            complainant_customer = Customers.query.get(complaint.complainant_id)
+            if complainant_customer:
+                vip_record = VIP_Customers.query.filter_by(customer_id=complainant_customer.customer_id).first()
+                complainant_is_vip = vip_record is not None
+
+        # Apply penalties
+        penalties_to_add = 2 if complainant_is_vip else 1
+        accused.complaint_count += penalties_to_add
+
+        # Evaluate performance after penalties are applied
+        evaluate_employee_performance(accused)
+
+        # Update complaint status
+        complaint.status = 'accepted'
+        complaint.reviewed_at = datetime.now(timezone.utc)
+
+        db.session.commit()
+
+        return jsonify({"success": True, "message": "Complaint accepted and penalties applied"}), 200
+
+    except Exception as e:
+        print(f"Error accepting complaint: {e}")
+        db.session.rollback()
+        return jsonify({"success": False, "message": "Database error"}), 500
+
+
 @app.route('/api/complaints/<int:complaint_id>/appeal', methods=['POST'])
 def appeal_complaint(complaint_id):
     """Allow accused party to appeal a complaint with a message to the manager"""
@@ -4418,7 +4644,7 @@ def appeal_complaint(complaint_id):
         if complaint.accused_id != accused_id:
             return jsonify({"success": False, "message": "Unauthorized"}), 403
 
-        if complaint.status not in ['pending', 'notified']:
+        if complaint.status not in ['pending', 'notified', 'upheld']:
             return jsonify({"success": False, "message": f"Can only appeal pending or notified complaints, current status: {complaint.status}"}), 400
 
         if hasattr(complaint, 'appeal_message') and complaint.appeal_message:
@@ -4494,56 +4720,75 @@ def review_complaint_appeal(complaint_id):
             accused = Employees.query.get(complaint.accused_id)
 
         if decision == 'repeal':
-            # Repeal: Add 2 complaints to the complainant (accuser)
+            # Repeal: Add 2 warnings/complaints to the complainant (accuser)
             if complainant:
                 if complaint.complainant_type == 'customer':
                     complainant.warning_count += 2
-                else:  # employee (chef or delivery)
-                    complainant.complaint_count += 2
                     
-                    # Check for demotion (3 complaints = 1 demotion)
+                    # Check if complainant is VIP and should be demoted at 2 warnings
+                    complainant_is_vip = VIP_Customers.query.filter_by(customer_id=complainant.customer_id).first() is not None
+                    if complainant.warning_count >= 2 and complainant_is_vip:
+                        vip_record = VIP_Customers.query.filter_by(customer_id=complainant.customer_id).first()
+                        if vip_record:
+                            db.session.delete(vip_record)
+                            complainant.warning_count = 0  # Reset warnings after demotion
+                    
+                    db.session.add(complainant)
+                else:  # employee (chef or delivery) - both get complaints that can lead to demotion
+                    complainant.complaint_count += 2
+                    db.session.add(complainant)
+                    
+                    # Check for demotion (3 complaints = 1 demotion
                     if complainant.complaint_count >= 3:
                         complainant.demotion_count += 1
                         complainant.complaint_count = 0  # Reset complaint count after demotion
                         
-                        # Handle role demotion
-                        if complainant.role == 'Chef':
-                            complainant.role = 'Delivery'
-                        elif complainant.role == 'Delivery':
-                            # Delivery drivers get fired on demotion since there's no lower role
+                        # Check for firing (2 demotions = fired) for both chefs and delivery drivers
+                        if complainant.demotion_count >= 2:
                             complainant.status = 'Fired'
-                            complainant.demotion_count = 0
-                        
-                        # Check for firing (2 demotions = fired), but only if not already fired
-                        if complainant.demotion_count >= 2 and complainant.status != 'Fired':
-                            complainant.status = 'Fired'
-                            complainant.demotion_count = 0
             
             complaint.status = 'repealed'
             complaint.manager_decision = f"REPEALED: {review_notes}"
         else:  # uphold
-            # Uphold: Add 1 warning to the accused
+            # Uphold: Add warning(s) to the accused
+            # Check if complainant is VIP - if so, accused gets 2 warnings/complaints instead of 1
+            is_complainant_vip = False
+            if complainant and complaint.complainant_type == 'customer':
+                vip_record = VIP_Customers.query.filter_by(customer_id=complainant.customer_id).first()
+                is_complainant_vip = vip_record is not None
+            
+            penalties_to_add = 2 if is_complainant_vip else 1
+            
             if accused:
                 if complaint.accused_type == 'customer':
-                    accused.warning_count += 1
-                else:  # employee
-                    accused.complaint_count += 1
+                    accused.warning_count += penalties_to_add
                     
-                    # Check for demotion
+                    # Check if accused is VIP
+                    accused_is_vip = VIP_Customers.query.filter_by(customer_id=accused.customer_id).first() is not None
+                    
+                    # At 2 warnings: demote VIP customers to regular customers
+                    if accused.warning_count >= 2 and accused_is_vip:
+                        vip_record = VIP_Customers.query.filter_by(customer_id=accused.customer_id).first()
+                        if vip_record:
+                            db.session.delete(vip_record)
+                            accused.warning_count = 0  # Reset warnings after demotion
+                    
+                    # At 3 warnings: blacklist regular customers
+                    if accused.warning_count >= 3 and not accused_is_vip:
+                        accused.is_blacklisted = True
+                        
+                else:  # employee
+                    accused.complaint_count += penalties_to_add
+                    # Evaluate performance after penalties are applied
+                    evaluate_employee_performance(accused)
+                    
+                    # Check for demotion (3 complaints = 1 demotion
                     if accused.complaint_count >= 3:
                         accused.demotion_count += 1
                         accused.complaint_count = 0
                         
-                        # Handle role demotion
-                        if accused.role == 'Chef':
-                            accused.role = 'Delivery'
-                        elif accused.role == 'Delivery':
-                            # Delivery drivers get fired on demotion
-                            accused.status = 'Fired'
-                            accused.demotion_count = 0
-                        
-                        # Check for firing (2 demotions = fired), but only if not already fired
-                        if accused.demotion_count >= 2 and accused.status != 'Fired':
+                        # Check for firing (2 demotions = fired) for both chefs and delivery drivers
+                        if accused.demotion_count >= 2:
                             accused.status = 'Fired'
                             accused.demotion_count = 0
             
@@ -4587,15 +4832,13 @@ def notify_complaint_accused(complaint_id):
                 accused_user_id = accused.customer_id
                 accused_name = accused.username
         elif complaint.accused_type in ['chef', 'delivery']:
-            accused = Employees.query.get(complaint.accused_id)
-            if accused:
-                accused_user_id = accused.employee_id
-                accused_name = accused.name
+            # Employees do not receive notifications - skip notification creation
+            return jsonify({"success": True, "message": "Employees do not receive notifications for complaints"}), 200
 
         if not accused_user_id:
             return jsonify({"success": False, "message": "Accused user not found"}), 404
 
-        # Create notification for accused user
+        # Create notification for accused user (only customers)
         notification = User_Notifications(
             user_id=accused_user_id,
             title="Complaint Filed Against You",

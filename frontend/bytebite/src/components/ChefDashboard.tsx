@@ -64,6 +64,7 @@ function ComplaintCard({ complaint, onAppealSubmitted }: ComplaintCardProps) {
   const [showAppealForm, setShowAppealForm] = useState(false);
   const [appealMessage, setAppealMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [accepting, setAccepting] = useState(false);
 
   const handleSubmitAppeal = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -84,6 +85,25 @@ function ComplaintCard({ complaint, onAppealSubmitted }: ComplaintCardProps) {
       alert('Failed to submit appeal');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleAcceptComplaint = async () => {
+    if (!confirm('Are you sure you want to accept this complaint? This will apply penalties to your account.')) return;
+
+    setAccepting(true);
+    try {
+      const response = await api.acceptComplaint(complaint.complaint_id);
+      if (response.success) {
+        onAppealSubmitted();
+      } else {
+        alert('Failed to accept complaint');
+      }
+    } catch (err) {
+      console.error('Failed to accept complaint', err);
+      alert('Failed to accept complaint');
+    } finally {
+      setAccepting(false);
     }
   };
 
@@ -120,7 +140,7 @@ function ComplaintCard({ complaint, onAppealSubmitted }: ComplaintCardProps) {
         </div>
       )}
 
-      {!complaint.appeal_message && (complaint.status === 'pending' || complaint.status === 'notified') && (
+      {!complaint.appeal_message && (complaint.status === 'pending' || complaint.status === 'notified' || complaint.status === 'upheld') && (
         <div className="flex gap-2">
           {!showAppealForm ? (
             <Button
@@ -165,6 +185,19 @@ function ComplaintCard({ complaint, onAppealSubmitted }: ComplaintCardProps) {
               </div>
             </form>
           )}
+        </div>
+      )}
+
+      {(complaint.status === 'upheld' || complaint.status === 'pending' || complaint.status === 'notified' || complaint.status === 'resolved') && !complaint.appeal_message && (
+        <div className="flex gap-2">
+          <Button
+            onClick={handleAcceptComplaint}
+            size="sm"
+            disabled={accepting}
+            className="bg-red-600 hover:bg-red-700 text-white"
+          >
+            {accepting ? 'Accepting...' : 'Accept Complaint'}
+          </Button>
         </div>
       )}
     </div>

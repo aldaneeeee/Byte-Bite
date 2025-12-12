@@ -21,6 +21,7 @@ export interface MenuItem {
     description?: string;
     category?: string;
     chef_name?: string;
+    chef_order_count?: number;
     rating?: number;
     is_vip?: boolean;
 }
@@ -424,8 +425,6 @@ export const api = {
     },
 
 
-<<<<<<< Updated upstream
-=======
     // Forum operations
     getForumPosts: () => fetchAPI("forum/posts"),
     createForumPost: (post: any) => fetchAPI("forum/posts", { method: "POST", body: JSON.stringify(post) }),
@@ -445,6 +444,7 @@ export const api = {
     reviewComplaint: (complaintId: string, review: any) => fetchAPI(`complaints/${complaintId}/review`, { method: "PUT", body: JSON.stringify(review) }),
     disputeComplaint: (complaintId: number, dispute: any) => fetchAPI(`complaints/${complaintId}/dispute`, { method: "PUT", body: JSON.stringify(dispute) }),
     appealComplaint: (complaintId: number, appeal: any) => fetchAPI(`complaints/${complaintId}/appeal`, { method: "POST", body: JSON.stringify(appeal) }),
+    acceptComplaint: (complaintId: number) => fetchAPI(`complaints/${complaintId}/accept`, { method: "POST" }),
     reviewAppeal: (complaintId: number, review: any) => fetchAPI(`complaints/${complaintId}/review-appeal`, { method: "PUT", body: JSON.stringify(review) }),
     notifyComplaintAccused: (complaintId: number) => fetchAPI(`complaints/${complaintId}/notify`, { method: "POST" }),
     updateComplaintStatus: (complaintId: number, status: string) => fetchAPI(`complaints/${complaintId}/status`, { method: "PUT", body: JSON.stringify({ status }) }),
@@ -452,7 +452,13 @@ export const api = {
     // Forum report endpoints
     appealForumReport: (reportId: number, appeal: any) => fetchAPI(`forum-reports/${reportId}/appeal`, { method: "POST", body: JSON.stringify(appeal) }),
     reviewForumAppeal: (reportId: number, review: any) => fetchAPI(`manager/forum-reports/${reportId}/review-appeal`, { method: "POST", body: JSON.stringify(review) }),
->>>>>>> Stashed changes
+
+    // Registration request endpoints
+    getRegistrationRequests: () => fetchAPI("manager/registration-requests"),
+    reviewRegistrationRequest: (requestId: number, action: string, denialReason?: string) => fetchAPI(`manager/registration-requests/${requestId}`, { 
+        method: "PUT", 
+        body: JSON.stringify({ action, denial_reason: denialReason }) 
+    }),
 
     // Public endpoints for home page
     getRecommendations: () => fetchAPI("recommendations"),

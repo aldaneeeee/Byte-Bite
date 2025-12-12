@@ -70,6 +70,14 @@ interface FinancialLog {
     created_at: string;
 }
 
+interface RegistrationRequest {
+    request_id: number;
+    username: string;
+    email: string;
+    phone_number: string;
+    created_at: string;
+}
+
 // 👇👇👇 新增 KB 接口 👇👇👇
 interface KBEntry {
   id: number;
@@ -79,8 +87,6 @@ interface KBEntry {
   avg_rating: number;
   rating_count: number;
   created_at: string;
-<<<<<<< Updated upstream
-=======
 }
 
 interface ForumReport {
@@ -117,20 +123,18 @@ interface Complaint {
     dispute_reason?: string;
     appeal_message?: string;
     appealed_at?: string;
->>>>>>> Stashed changes
 }
 
 export function ManagerDashboard() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [customerSearch, setCustomerSearch] = useState('');
   const [biddings, setBiddings] = useState<BiddingSession[]>([]);
   const [financialLogs, setFinancialLogs] = useState<FinancialLog[]>([]);
-<<<<<<< Updated upstream
-=======
   const [forumReports, setForumReports] = useState<ForumReport[]>([]);
   const [complaints, setComplaints] = useState<Complaint[]>([]);
->>>>>>> Stashed changes
   const [deliveryStaff, setDeliveryStaff] = useState<Employee[]>([]);
+  const [registrationRequests, setRegistrationRequests] = useState<RegistrationRequest[]>([]);
   
   // 👇👇👇 新增 KB State 👇👇👇
   const [kbEntries, setKbEntries] = useState<KBEntry[]>([]);
@@ -182,35 +186,24 @@ export function ManagerDashboard() {
     try {
       setLoading(true);
       // 👇👇👇 增加 getKnowledgeBase 调用 👇👇👇
-<<<<<<< Updated upstream
-      const [employeesRes, customersRes, biddingsRes, financialsRes, kbRes] = await Promise.all([
-=======
-      const [employeesRes, customersRes, biddingsRes, financialsRes, kbRes, reportsRes, complaintsRes] = await Promise.allSettled([
->>>>>>> Stashed changes
+      const [employeesRes, customersRes, biddingsRes, financialsRes, kbRes, reportsRes, complaintsRes, registrationRes] = await Promise.allSettled([
         api.getEmployees(),
         api.getAllCustomers(),
         api.getManagerBiddings(),
         api.getFinancialLogs(),
-<<<<<<< Updated upstream
-        api.getKnowledgeBase() // 获取 AI 知识库
-=======
         api.getKnowledgeBase(), // 获取 AI 知识库
         api.getForumReports(),
-        api.getComplaints()
+        api.getComplaints(),
+        api.getRegistrationRequests()
         
->>>>>>> Stashed changes
       ]);
 
-      if (employeesRes.success) {
-          setEmployees(employeesRes.employees);
-          setDeliveryStaff(employeesRes.employees.filter((e: Employee) => e.role === 'Delivery'));
+      if (employeesRes.status === 'fulfilled' && employeesRes.value.success) {
+          setEmployees(employeesRes.value.employees);
+          setDeliveryStaff(employeesRes.value.employees.filter((e: Employee) => e.role === 'Delivery'));
+      } else if (employeesRes.status === 'rejected') {
+          console.error('Failed to load employees:', employeesRes.reason);
       }
-<<<<<<< Updated upstream
-      if (customersRes.success) setCustomers(customersRes.customers);
-      if (biddingsRes.success) setBiddings(biddingsRes.biddings);
-      if (financialsRes.success) setFinancialLogs(financialsRes.logs);
-      if (kbRes.success) setKbEntries(kbRes.entries); // 设置 KB 数据
-=======
       if (customersRes.status === 'fulfilled' && customersRes.value.success) setCustomers(customersRes.value.customers);
       else if (customersRes.status === 'rejected') console.error('Failed to load customers:', customersRes.reason);
       if (biddingsRes.status === 'fulfilled' && biddingsRes.value.success) setBiddings(biddingsRes.value.biddings);
@@ -234,7 +227,11 @@ export function ManagerDashboard() {
       } else if (kbRes.status === 'rejected') {
           console.error('Failed to load knowledge base:', kbRes.reason);
       }
->>>>>>> Stashed changes
+      if (registrationRes.status === 'fulfilled' && registrationRes.value.success) {
+          setRegistrationRequests(registrationRes.value.requests);
+      } else if (registrationRes.status === 'rejected') {
+          console.error('Failed to load registration requests:', registrationRes.reason);
+      }
       
     } catch (err) {
       setError('Failed to load data');
@@ -368,8 +365,6 @@ export function ManagerDashboard() {
       } 
   };
 
-<<<<<<< Updated upstream
-=======
   // Toggle VIP status
   const handleToggleVIP = async (customerId: number, promote: boolean) => {
     try {
@@ -465,12 +460,34 @@ export function ManagerDashboard() {
       } catch(e) { setError('Failed to review forum appeal'); }
   };
 
->>>>>>> Stashed changes
+  const handleReviewRegistrationRequest = async (requestId: number, action: string) => {
+    try {
+      let denialReason = '';
+      if (action === 'deny') {
+        denialReason = prompt('Enter denial reason (optional):') || '';
+      }
+      
+      const res = await api.reviewRegistrationRequest(requestId, action, denialReason);
+      if (res.success) {
+        setSuccess(`Registration request ${action}d successfully`);
+        loadData();
+      } else {
+        setError(res.message || 'Failed to review registration request');
+      }
+    } catch (err) {
+      setError('Failed to review registration request');
+    }
+  };
+
   const handleOpenAssign = (b: BiddingSession) => { setSelectedBidding(b); setAssignForm({ employee_id: '', memo: '' }); setAssignModalOpen(true); };
   
   const handleAssignSubmit = async (e: React.FormEvent) => { 
       e.preventDefault(); 
       if(!selectedBidding) return; 
+      if (!assignForm.memo.trim()) {
+          setError("Memo is required when manually assigning orders");
+          return;
+      }
       try { 
           const res = await api.managerAssignOrder({ 
               bidding_id: selectedBidding.bidding_id, 
@@ -513,6 +530,11 @@ export function ManagerDashboard() {
     return <div className="min-h-screen bg-[#0a1628] flex items-center justify-center"><div className="text-white">Loading...</div></div>;
   }
 
+  const filteredCustomers = customers.filter(c =>
+    c.username.toLowerCase().includes(customerSearch.toLowerCase()) ||
+    c.email.toLowerCase().includes(customerSearch.toLowerCase())
+  );
+
   return (
     <div className="min-h-screen bg-[#0a1628] text-white">
       <div className="bg-[#0f1f3a] border-b border-[#00ff88]/20 p-4">
@@ -551,12 +573,12 @@ export function ManagerDashboard() {
             {/* 👇👇👇 新增 Tab: AI Brain 👇👇👇 */}
             <TabsTrigger value="ai-brain" className="flex-1 data-[state=active]:bg-[#00ff88] data-[state=active]:text-[#0a1628]">
                <Brain className="w-4 h-4 mr-2"/> AI Knowledge Base
-<<<<<<< Updated upstream
-=======
             </TabsTrigger>
             <TabsTrigger value="reports" className="flex-1 data-[state=active]:bg-[#00ff88] data-[state=active]:text-[#0a1628]">
                <Flag className="w-4 h-4 mr-2"/> Reports
->>>>>>> Stashed changes
+            </TabsTrigger>
+            <TabsTrigger value="registration" className="flex-1 data-[state=active]:bg-[#00ff88] data-[state=active]:text-[#0a1628]">
+               <Users className="w-4 h-4 mr-2"/> Registration Requests
             </TabsTrigger>
           </TabsList>
 
@@ -700,7 +722,7 @@ export function ManagerDashboard() {
                             </TableCell>
                             <TableCell className="align-middle text-white w-1/6">
                                 <div className="text-center">
-                                    <Badge className={e.complaint_count >= 2 ? 'bg-red-500 text-white' : e.complaint_count >= 1 ? 'bg-yellow-500 text-white' : 'bg-green-500 text-white'}>
+                                    <Badge className={e.complaint_count >= 3 ? 'bg-red-500 text-white' : e.complaint_count >= 2 ? 'bg-yellow-500 text-white' : 'bg-green-500 text-white'}>
                                         {e.complaint_count}/3
                                     </Badge>
                                 </div>
@@ -731,7 +753,19 @@ export function ManagerDashboard() {
           {/* Tab: Customers */}
           <TabsContent value="customers">
             <Card className="bg-[#0f1f3a] border-[#00ff88]/20 p-6">
-                <div className="flex justify-between mb-4"><h2 className="text-xl font-semibold">Customers</h2></div>
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-semibold">Customers</h2>
+                  <div className="relative w-64">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/50 w-4 h-4" />
+                    <Input
+                      type="text"
+                      placeholder="Search customers..."
+                      value={customerSearch}
+                      onChange={(e) => setCustomerSearch(e.target.value)}
+                      className="pl-12 bg-[#1a2f4a] border-[#00ff88]/20 text-white placeholder:text-white/40 focus:border-[#00ff88] focus:ring-[#00ff88]/20"
+                    />
+                  </div>
+                </div>
                 <Table>
                     <TableHeader>
                         <TableRow className="border-[#00ff88]/20">
@@ -742,7 +776,7 @@ export function ManagerDashboard() {
                             <TableHead className="text-white h-12 align-middle w-1/6 text-right">Actions</TableHead>
                         </TableRow>
                     </TableHeader>
-                    <TableBody>{customers.map(c => (
+                    <TableBody>{filteredCustomers.map(c => (
                         <TableRow key={c.id} className="border-[#00ff88]/10 h-16">
                             <TableCell className="align-middle text-white">
                                 <div>
@@ -900,8 +934,6 @@ export function ManagerDashboard() {
                     )}
                 </div>
             </div>
-<<<<<<< Updated upstream
-=======
             </TabsContent>
           {/* Tab: Reports */}
           <TabsContent value="reports">
@@ -1052,7 +1084,72 @@ export function ManagerDashboard() {
                 </Table>
               </Card>
             </div>
->>>>>>> Stashed changes
+          </TabsContent>
+
+          {/* Tab: Registration Requests */}
+          <TabsContent value="registration">
+            <Card className="bg-[#0f1f3a] border-[#00ff88]/20 p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-semibold">Pending Registration Requests</h2>
+                <Button onClick={loadData} size="sm" variant="outline" className="border-[#00ff88]/30 text-white">Refresh</Button>
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-[#00ff88]/20">
+                    <TableHead className="text-white">Request Details</TableHead>
+                    <TableHead className="text-white">Contact Info</TableHead>
+                    <TableHead className="text-white">Submitted</TableHead>
+                    <TableHead className="text-white text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {registrationRequests && registrationRequests.length > 0 ? registrationRequests.map(request => (
+                    <TableRow key={request.request_id} className="border-[#00ff88]/10">
+                      <TableCell className="text-white">
+                        <div>
+                          <div className="font-medium">Request #{request.request_id}</div>
+                          <div className="text-sm text-white/70">Username: {request.username}</div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-white">
+                        <div>
+                          <div className="text-sm">{request.email}</div>
+                          <div className="text-sm text-white/70">{request.phone_number}</div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-white text-sm">
+                        {new Date(request.created_at).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button 
+                            size="sm" 
+                            onClick={() => handleReviewRegistrationRequest(request.request_id, 'approve')}
+                            className="bg-green-500 hover:bg-green-600 text-white"
+                          >
+                            Approve
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            onClick={() => handleReviewRegistrationRequest(request.request_id, 'deny')}
+                            className="text-red-400 border-red-400 hover:bg-red-400 hover:text-white"
+                          >
+                            Deny
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )) : (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center text-white/50 py-8">
+                        {registrationRequests ? 'No pending registration requests' : 'Loading requests...'}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </Card>
           </TabsContent>
 
         </Tabs>
@@ -1114,7 +1211,7 @@ export function ManagerDashboard() {
                                 {deliveryStaff.map(e => <SelectItem key={e.id} value={e.id.toString()}>{e.name} (Rep: {e.reputation_score})</SelectItem>)}
                             </SelectContent>
                         </Select>
-                        <Input value={assignForm.memo} onChange={e => setAssignForm({...assignForm, memo: e.target.value})} placeholder="Memo" className="bg-[#1a2a3a] text-white" />
+                        <Input value={assignForm.memo} onChange={e => setAssignForm({...assignForm, memo: e.target.value})} placeholder="Memo (required)" className="bg-[#1a2a3a] text-white" required />
                         <Button type="submit" className="w-full bg-[#00ff88] text-[#0a1628]">Confirm</Button>
                     </form>
                 </Card>

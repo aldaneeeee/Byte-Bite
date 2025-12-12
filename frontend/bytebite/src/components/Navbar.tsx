@@ -4,6 +4,7 @@ import { useCart } from './CartContext';
 import { Button } from './ui/button';
 import { useState, useEffect } from 'react';
 import { api } from '../utils/api';
+import { NotificationBell } from './NotificationBell';
 
 // Navbar component - appears at top of every page
 export function Navbar() {
@@ -84,6 +85,9 @@ export function Navbar() {
                 )}
               </Button>
             </Link>
+
+            {/* Notification Bell */}
+            <NotificationBell />
             
             {/* User Profile or Login - changes based on login state */}
             {isLoggedIn ? (
@@ -153,6 +157,9 @@ export function Navbar() {
                   <User className="w-4 h-4 inline mr-2" />
                   My Profile
                 </Link>
+                <div className="py-2 px-4">
+                  <NotificationBell />
+                </div>
                 <button
                   onClick={handleLogout}
                   className="w-full text-left py-2 px-4 text-red-400 hover:bg-red-500/10 rounded-md transition-colors"

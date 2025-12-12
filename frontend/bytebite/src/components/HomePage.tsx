@@ -327,7 +327,7 @@ export function HomePage() {
                       </div>
                     )}
                     <Badge variant="secondary" className="bg-[#00ff88]/10 text-[#00ff88]">
-                      {chef.dish_count} dishes
+                      {chef.total_orders} orders
                     </Badge>
                   </div>
                   <p className="text-white/70 text-sm">
